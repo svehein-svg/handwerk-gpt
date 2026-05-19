@@ -95,7 +95,7 @@ ${body.message || ""}
         typeof parsed.site_visit_needed === "boolean"
           ? parsed.site_visit_needed
           : false,
-      missing_info: [],
+     missing_info: [] as string[],
       suggested_reply: parsed.suggested_reply || "",
       status: parsed.status || "neu",
     };
