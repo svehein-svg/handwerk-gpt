@@ -34,7 +34,14 @@ export default function DashboardPage() {
       }
 
       const data = await res.json();
-      setLeads(data);
+
+      // NUR offene Leads anzeigen
+      const filtered = data.filter(
+        (lead: Lead) =>
+          lead.status?.toLowerCase() !== "erledigt"
+      );
+
+      setLeads(filtered);
     } catch (err: any) {
       setError(err.message || "Fehler beim Laden.");
     } finally {
@@ -63,15 +70,9 @@ export default function DashboardPage() {
         throw new Error("Status konnte nicht geändert werden.");
       }
 
+      // SOFORT aus Dashboard entfernen
       setLeads((prev) =>
-        prev.map((lead) =>
-          lead.id === id
-            ? {
-                ...lead,
-                status,
-              }
-            : lead
-        )
+        prev.filter((lead) => lead.id !== id)
       );
     } catch (err) {
       console.error(err);
@@ -80,7 +81,9 @@ export default function DashboardPage() {
   }
 
   function mailtoLink(lead: Lead) {
-    const subject = `Ihre Anfrage${lead.trade ? ` - ${lead.trade}` : ""}`;
+    const subject = `Ihre Anfrage${
+      lead.trade ? ` - ${lead.trade}` : ""
+    }`;
 
     const body =
       lead.suggested_reply ||
@@ -105,10 +108,6 @@ Viele Grüße`;
     (lead) => lead.status?.toLowerCase() === "neu"
   ).length;
 
-  const completedCount = leads.filter(
-    (lead) => lead.status?.toLowerCase() === "erledigt"
-  ).length;
-
   return (
     <>
       <main className="dashboard-page">
@@ -122,7 +121,8 @@ Viele Grüße`;
               <h1>Dashboard</h1>
 
               <p>
-                Neue Kundenanfragen, automatisch analysiert und vorbereitet.
+                Neue Kundenanfragen automatisch analysiert
+                und vorbereitet.
               </p>
             </div>
 
@@ -139,7 +139,7 @@ Viele Grüße`;
                 icon="👥"
                 label="Leads"
                 value={leads.length}
-                sub="Gesamt"
+                sub="Offene Leads"
               />
 
               <StatCard
@@ -153,14 +153,7 @@ Viele Grüße`;
                 icon="⚡"
                 label="Neu"
                 value={newCount}
-                sub="Offene Leads"
-              />
-
-              <StatCard
-                icon="✅"
-                label="Erledigt"
-                value={completedCount}
-                sub="Abgeschlossen"
+                sub="Neue Anfragen"
               />
             </div>
 
@@ -178,7 +171,7 @@ Viele Grüße`;
 
             {!loading && !error && leads.length === 0 && (
               <div className="message-card">
-                Noch keine Leads vorhanden.
+                Keine offenen Leads vorhanden.
               </div>
             )}
 
@@ -187,11 +180,7 @@ Viele Grüße`;
                 {leads.map((lead) => (
                   <article
                     key={lead.id}
-                    className={`lead-card ${
-                      lead.status?.toLowerCase() === "erledigt"
-                        ? "completed"
-                        : ""
-                    }`}
+                    className="lead-card"
                     onClick={() => {
                       window.location.href = `/dashboard/${lead.id}`;
                     }}
@@ -204,11 +193,14 @@ Viele Grüße`;
 
                         <div>
                           <h2>
-                            {lead.customer_name || "Unbekannter Kunde"}
+                            {lead.customer_name ||
+                              "Unbekannter Kunde"}
                           </h2>
 
                           <p>
-                            📍 {lead.city || "Kein Ort angegeben"}
+                            📍{" "}
+                            {lead.city ||
+                              "Kein Ort angegeben"}
                           </p>
                         </div>
                       </div>
@@ -242,11 +234,13 @@ Viele Grüße`;
                           </div>
 
                           <div className="info-value">
-                            {lead.phone || "Keine Telefonnummer"}
+                            {lead.phone ||
+                              "Keine Telefonnummer"}
                           </div>
 
                           <div className="info-value email">
-                            {lead.email || "Keine E-Mail"}
+                            {lead.email ||
+                              "Keine E-Mail"}
                           </div>
                         </div>
                       </div>
@@ -271,7 +265,9 @@ Viele Grüße`;
                         {lead.phone ? (
                           <a
                             href={`tel:${lead.phone}`}
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) =>
+                              e.stopPropagation()
+                            }
                             className="call-button"
                           >
                             📞 Anrufen
@@ -285,7 +281,9 @@ Viele Grüße`;
                         {lead.email ? (
                           <a
                             href={mailtoLink(lead)}
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) =>
+                              e.stopPropagation()
+                            }
                             className="mail-button"
                           >
                             ✉️ E-Mail
@@ -299,7 +297,10 @@ Viele Grüße`;
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            updateStatus(lead.id, "erledigt");
+                            updateStatus(
+                              lead.id,
+                              "erledigt"
+                            );
                           }}
                           className="done-button"
                         >
@@ -387,7 +388,7 @@ Viele Grüße`;
 
         .stats-grid {
           display: grid;
-          grid-template-columns: repeat(4,1fr);
+          grid-template-columns: repeat(3,1fr);
           gap: 18px;
           margin-bottom: 36px;
         }
@@ -440,12 +441,6 @@ Viele Grüße`;
           border-radius: 32px;
           overflow: hidden;
           box-shadow: 0 20px 50px rgba(15,23,42,0.08);
-          transition: 0.2s;
-        }
-
-        .lead-card.completed {
-          opacity: 0.7;
-          background: #f0fdf4;
         }
 
         .lead-head {
@@ -630,7 +625,7 @@ Viele Grüße`;
           }
 
           .stats-grid {
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
           }
 
           .lead-body {
