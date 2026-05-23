@@ -17,3 +17,41 @@ export async function GET() {
 
   return Response.json(data ?? []);
 }
+
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json();
+
+    const { id, status } = body;
+
+    if (!id || !status) {
+      return Response.json(
+        { error: "ID und Status erforderlich." },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabase
+      .from("leads")
+      .update({
+        status,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      return Response.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return Response.json(data);
+  } catch (err: any) {
+    return Response.json(
+      { error: err.message || "Fehler" },
+      { status: 500 }
+    );
+  }
+}
