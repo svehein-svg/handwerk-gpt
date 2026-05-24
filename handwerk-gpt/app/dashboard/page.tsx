@@ -25,599 +25,697 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    async function loadLeads() {
-      try {
-        const res = await fetch("/api/leads");
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Leads konnten nicht geladen werden.");
-        }
-        setLeads(await res.json());
-      } catch (err: any) {
-        setError(err.message || "Fehler beim Laden.");
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadLeads();
   }, []);
 
-  function getReplyText(lead: Lead) {
-    return (
-      lead.suggested_reply ||
-      `Hallo ${lead.customer_name || ""},
+  async function loadLeads() {
+    try {
+      const res = await fetch("/api/leads");
+
+      if (!res.ok) {
+        throw new Error("Fehler beim Laden");
+      }
+
+      const data = await res.json();
+      setLeads(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // AUTOMATISCHE KI-ANTWORT
+  function createReply(lead: Lead) {
+    const customer =
+      lead.customer_name || "Guten Tag";
+
+    const missingFields: string[] = [];
+
+    // Telefonnummer prüfen
+    if (
+      !lead.phone ||
+      lead.phone.trim() === ""
+    ) {
+      missingFields.push("Telefonnummer");
+    }
+
+    // E-Mail prüfen
+    if (
+      !lead.email ||
+      lead.email.trim() === ""
+    ) {
+      missingFields.push("E-Mail-Adresse");
+    }
+
+    // Ort prüfen
+    if (
+      !lead.city ||
+      lead.city.trim() === ""
+    ) {
+      missingFields.push("Ort / Adresse");
+    }
+
+    // Weitere fehlende Infos
+    if (
+      lead.missing_info &&
+      Array.isArray(lead.missing_info)
+    ) {
+      lead.missing_info.forEach((info) => {
+        if (!missingFields.includes(info)) {
+          missingFields.push(info);
+        }
+      });
+    }
+
+    // FEHLENDE INFOS
+    if (missingFields.length > 0) {
+      return `Hallo ${customer},
 
 vielen Dank für Ihre Anfrage.
 
-Wir melden uns schnellstmöglich bei Ihnen.
+Damit wir Ihre Anfrage schneller bearbeiten können, benötigen wir noch folgende Informationen:
 
-Viele Grüße`
-    );
-  }
+${missingFields
+  .map((f) => `• ${f}`)
+  .join("\n")}
 
-  function mailtoLink(lead: Lead) {
-    const subject = `Ihre Anfrage${lead.trade ? ` - ${lead.trade}` : ""}`;
-    const body = getReplyText(lead);
+Vielen Dank.
 
-    return `mailto:${lead.email}?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(body)}`;
-  }
-
-  function whatsappLink(lead: Lead) {
-    let phone = lead.phone.replace(/\D/g, "");
-
-    if (phone.startsWith("0")) {
-      phone = "49" + phone.slice(1);
+Freundliche Grüße`;
     }
 
-    const message = getReplyText(lead);
+    // KI Antwort verwenden
+    if (
+      lead.suggested_reply &&
+      lead.suggested_reply.trim() !== ""
+    ) {
+      return lead.suggested_reply;
+    }
 
-    return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    // Standardantwort
+    return `Hallo ${customer},
+
+vielen Dank für Ihre Anfrage bezüglich ${
+      lead.trade || "Ihres Anliegens"
+    }.
+
+Wir melden uns schnellstmöglich bei Ihnen.
+
+Freundliche Grüße`;
   }
 
-  const urgentCount = leads.filter(
-    (lead) => lead.urgency?.toLowerCase() === "hoch"
-  ).length;
+  // WHATSAPP LINK
+  function createWhatsAppLink(
+    lead: Lead
+  ) {
+    let phone = lead.phone || "";
 
-  const newCount = leads.filter(
-    (lead) => lead.status?.toLowerCase() === "neu"
-  ).length;
+    phone = phone.replace(/\D/g, "");
 
-  const todayCount = leads.filter((lead) => {
-    if (!lead.created_at) return false;
-    return new Date(lead.created_at).toDateString() === new Date().toDateString();
-  }).length;
+    if (phone.startsWith("0")) {
+      phone =
+        "49" + phone.substring(1);
+    }
+
+    const message = createReply(lead);
+
+    return `https://wa.me/${phone}?text=${encodeURIComponent(
+      message
+    )}`;
+  }
+
+  // MAIL LINK
+  function createMailLink(lead: Lead) {
+    const subject = `Ihre Anfrage - ${
+      lead.trade ||
+      "Handwerkeranfrage"
+    }`;
+
+    return `mailto:${
+      lead.email
+    }?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(
+      createReply(lead)
+    )}`;
+  }
+
+  // ERLEDIGT
+  async function markAsDone(id: number) {
+    try {
+      await fetch(`/api/leads/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body: JSON.stringify({
+          status: "erledigt",
+        }),
+      });
+
+      setLeads((prev) =>
+        prev.map((lead) =>
+          lead.id === id
+            ? {
+                ...lead,
+                status: "erledigt",
+              }
+            : lead
+        )
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  const activeLeads = leads.filter(
+    (lead) =>
+      lead.status !== "erledigt"
+  );
+
+  const doneLeads = leads.filter(
+    (lead) =>
+      lead.status === "erledigt"
+  );
 
   return (
-    <>
-      <main className="dashboard-page">
-        <section className="hero">
-          <div className="container hero-inner">
-            <div>
-              <div className="app-badge">✨ KI-ANFRAGE-ASSISTENT</div>
-              <h1>Dashboard</h1>
-              <p>Neue Kundenanfragen, automatisch analysiert und vorbereitet.</p>
+    <main className="page">
+      <section className="hero">
+        <div className="heroContent">
+          <div>
+            <div className="badge">
+              ✨ KI Anfrage Assistent
             </div>
 
-            <a href="/" className="new-button">
-              + Neue Anfrage
-            </a>
+            <h1>Handwerker Dashboard</h1>
+
+            <p>
+              KI Antworten,
+              WhatsApp Integration und
+              Kundenverwaltung.
+            </p>
           </div>
-        </section>
 
-        <section className="content">
-          <div className="container">
-            <div className="stats-grid">
-              <StatCard icon="👥" label="Leads" value={leads.length} sub="Gesamt" />
-              <StatCard icon="📞" label="Dringend" value={urgentCount} sub="Hohe Priorität" />
-              <StatCard icon="⚡" label="Neu" value={newCount} sub="Ungelesene" />
-              <StatCard icon="📅" label="Heute" value={todayCount} sub="Neue Leads" />
-            </div>
+          <a
+            className="newButton"
+            href="/"
+          >
+            + Neue Anfrage
+          </a>
+        </div>
+      </section>
 
-            {loading && <div className="message-card">Lade Leads...</div>}
-            {error && <div className="message-card error">{error}</div>}
-            {!loading && !error && leads.length === 0 && (
-              <div className="message-card">Noch keine Leads vorhanden.</div>
-            )}
+      <section className="content">
+        <div className="statsGrid">
+          <StatCard
+            icon="📨"
+            title="Anfragen"
+            value={activeLeads.length}
+          />
 
-            {!loading && !error && leads.length > 0 && (
-              <div className="lead-list">
-                {leads.map((lead) => (
-                  <article
-                    key={lead.id}
-                    className="lead-card"
-                    onClick={() => {
-                      window.location.href = `/dashboard/${lead.id}`;
-                    }}
-                  >
-                    <div className="lead-head">
-                      <div className="lead-person">
-                        <div className="avatar">
-                          {(lead.customer_name || "?").charAt(0)}
-                        </div>
+          <StatCard
+            icon="⚡"
+            title="Dringend"
+            value={
+              activeLeads.filter(
+                (l) =>
+                  l.urgency?.toLowerCase() ===
+                  "hoch"
+              ).length
+            }
+          />
 
-                        <div>
-                          <h2>{lead.customer_name || "Unbekannter Kunde"}</h2>
-                          <p>📍 {lead.city || "Kein Ort angegeben"}</p>
-                        </div>
-                      </div>
+          <StatCard
+            icon="✅"
+            title="Erledigt"
+            value={doneLeads.length}
+          />
 
-                      <div className="priority">● {lead.urgency || "normal"}</div>
-                    </div>
+          <StatCard
+            icon="📅"
+            title="Heute"
+            value={
+              leads.filter((lead) => {
+                if (
+                  !lead.created_at
+                )
+                  return false;
 
-                    <div className="lead-body">
-                      <InfoBlock icon="🔧" title="Gewerk" value={lead.trade || "-"} />
-                      <InfoBlock icon="📄" title="Zusammenfassung" value={lead.summary || "-"} />
+                return (
+                  new Date(
+                    lead.created_at
+                  ).toDateString() ===
+                  new Date().toDateString()
+                );
+              }).length
+            }
+          />
+        </div>
 
-                      <div className="info-block">
-                        <div className="info-icon">☎️</div>
-                        <div>
-                          <div className="info-title">Kontakt</div>
-                          <div className="info-value">
-                            {lead.phone || "Keine Telefonnummer"}
-                          </div>
-                          <div className="info-value email">
-                            {lead.email || "Keine E-Mail"}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+        {loading && (
+          <div className="messageCard">
+            Lade Daten...
+          </div>
+        )}
 
-                    <div className="lead-footer">
-                      <div className="status-row">
-                        <span className="status-pill">{lead.status || "neu"}</span>
-                        <span className="date-text">
-                          {lead.created_at
-                            ? new Date(lead.created_at).toLocaleString("de-DE")
-                            : "Gerade eben"}
-                        </span>
-                      </div>
+        {error && (
+          <div className="errorCard">
+            {error}
+          </div>
+        )}
 
-                      <div className="actions">
-                        {lead.phone ? (
-                          <a
-                            href={`tel:${lead.phone}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="call-button"
-                          >
-                            📞 Anrufen
-                          </a>
-                        ) : (
-                          <span className="disabled-button">Keine Nummer</span>
-                        )}
+        {!loading &&
+          activeLeads.map((lead) => (
+            <div
+              className="leadCard"
+              key={lead.id}
+            >
+              <div className="leadHeader">
+                <div className="avatar">
+                  {lead.customer_name?.charAt(
+                    0
+                  ) || "?"}
+                </div>
 
-                        {lead.phone ? (
-                          <a
-                            href={whatsappLink(lead)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="whatsapp-button"
-                          >
-                            💬 WhatsApp
-                          </a>
-                        ) : (
-                          <span className="disabled-button">Kein WhatsApp</span>
-                        )}
+                <div className="leadInfo">
+                  <h2>
+                    {lead.customer_name ||
+                      "Unbekannter Kunde"}
+                  </h2>
 
-                        {lead.email ? (
-                          <a
-                            href={mailtoLink(lead)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="mail-button"
-                          >
-                            ✉️ E-Mail
-                          </a>
-                        ) : (
-                          <span className="disabled-button">Keine Mail</span>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                ))}
+                  <div className="subInfo">
+                    📍{" "}
+                    {lead.city ||
+                      "Kein Ort"}
+                  </div>
+                </div>
+
+                <div className="urgency">
+                  {lead.urgency ||
+                    "normal"}
+                </div>
               </div>
-            )}
-          </div>
-        </section>
-      </main>
+
+              <div className="grid">
+                <InfoBlock
+                  title="Gewerk"
+                  value={
+                    lead.trade || "-"
+                  }
+                />
+
+                <InfoBlock
+                  title="Zusammenfassung"
+                  value={
+                    lead.summary || "-"
+                  }
+                />
+
+                <InfoBlock
+                  title="Telefon"
+                  value={
+                    lead.phone || "-"
+                  }
+                />
+              </div>
+
+              <div className="messageBox">
+                <div className="messageTitle">
+                  KI Antwortvorschlag
+                </div>
+
+                <div className="messageText">
+                  {createReply(lead)}
+                </div>
+              </div>
+
+              <div className="actions">
+                {lead.phone && (
+                  <a
+                    href={`tel:${lead.phone}`}
+                    className="callButton"
+                  >
+                    📞 Anrufen
+                  </a>
+                )}
+
+                {lead.phone && (
+                  <a
+                    href={createWhatsAppLink(
+                      lead
+                    )}
+                    target="_blank"
+                    className="whatsappButton"
+                  >
+                    💬 WhatsApp senden
+                  </a>
+                )}
+
+                {lead.email && (
+                  <a
+                    href={createMailLink(
+                      lead
+                    )}
+                    className="mailButton"
+                  >
+                    ✉️ E-Mail senden
+                  </a>
+                )}
+
+                <button
+                  onClick={() =>
+                    markAsDone(lead.id)
+                  }
+                  className="doneButton"
+                >
+                  ✅ Erledigt
+                </button>
+              </div>
+            </div>
+          ))}
+      </section>
 
       <style jsx>{`
-        .dashboard-page {
+        .page {
           min-height: 100vh;
-          background: #f4f7fb;
-          color: #0f172a;
-          font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-            "Segoe UI", sans-serif;
-        }
-
-        .container {
-          max-width: 1180px;
-          margin: 0 auto;
+          background: #f3f6fb;
+          font-family: Arial,
+            sans-serif;
         }
 
         .hero {
-          background: radial-gradient(
-            circle at top right,
-            #123b7a 0,
-            #071226 45%,
-            #050b16 100%
+          background: linear-gradient(
+            135deg,
+            #081224,
+            #123c80
           );
+          padding: 40px 20px 120px;
           color: white;
-          padding: 34px 22px 125px;
         }
 
-        .hero-inner {
+        .heroContent {
+          max-width: 1200px;
+          margin: 0 auto;
           display: flex;
           justify-content: space-between;
-          gap: 24px;
+          gap: 20px;
           align-items: center;
         }
 
-        .app-badge {
-          display: inline-flex;
+        .badge {
+          display: inline-block;
           background: #145cff;
-          color: white;
-          font-weight: 900;
           padding: 10px 16px;
           border-radius: 14px;
+          font-weight: bold;
           margin-bottom: 20px;
         }
 
         h1 {
-          font-size: 56px;
-          line-height: 1;
+          font-size: 54px;
           margin: 0;
-          color: white;
-          font-weight: 950;
-          letter-spacing: -0.04em;
         }
 
-        .hero p {
-          margin-top: 18px;
-          color: rgba(255, 255, 255, 0.9);
+        p {
           font-size: 20px;
-          font-weight: 500;
+          opacity: 0.9;
         }
 
-        .new-button {
+        .newButton {
           background: #145cff;
           color: white;
+          padding: 18px 28px;
+          border-radius: 18px;
           text-decoration: none;
-          font-weight: 900;
-          font-size: 19px;
-          padding: 22px 34px;
-          border-radius: 20px;
-          white-space: nowrap;
+          font-weight: bold;
         }
 
         .content {
-          margin-top: -72px;
-          padding: 0 22px 50px;
+          max-width: 1200px;
+          margin: -70px auto 0;
+          padding: 0 20px 50px;
         }
 
-        .stats-grid {
+        .statsGrid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 18px;
-          margin-bottom: 36px;
-        }
-
-        .stat-card {
-          background: white;
-          border: 1px solid #e5eaf2;
-          border-radius: 26px;
-          padding: 28px;
-          display: flex;
-          gap: 18px;
-          align-items: center;
-        }
-
-        .stat-icon {
-          width: 70px;
-          height: 70px;
-          border-radius: 20px;
-          background: #edf3ff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 32px;
-        }
-
-        .stat-label {
-          color: #475569;
-          font-size: 16px;
-          font-weight: 800;
-        }
-
-        .stat-value {
-          color: #0f172a;
-          font-size: 40px;
-          font-weight: 950;
-        }
-
-        .stat-sub {
-          color: #64748b;
-          font-size: 14px;
-          font-weight: 600;
-        }
-
-        .lead-list {
-          display: grid;
-          gap: 26px;
-        }
-
-        .lead-card {
-          background: white;
-          border: 1px solid #e5eaf2;
-          border-radius: 32px;
-          overflow: hidden;
-          cursor: pointer;
-        }
-
-        .lead-head {
-          padding: 28px 32px;
-          display: flex;
-          justify-content: space-between;
+          grid-template-columns:
+            repeat(
+              auto-fit,
+              minmax(220px, 1fr)
+            );
           gap: 20px;
+          margin-bottom: 30px;
         }
 
-        .lead-person {
+        .statCard {
+          background: white;
+          border-radius: 24px;
+          padding: 24px;
+          box-shadow: 0 8px 20px
+            rgba(0, 0, 0, 0.06);
+        }
+
+        .statIcon {
+          font-size: 32px;
+          margin-bottom: 12px;
+        }
+
+        .statTitle {
+          color: #64748b;
+          font-weight: bold;
+        }
+
+        .statValue {
+          font-size: 40px;
+          font-weight: bold;
+          margin-top: 10px;
+        }
+
+        .leadCard {
+          background: white;
+          border-radius: 30px;
+          padding: 28px;
+          margin-bottom: 26px;
+          box-shadow: 0 10px 30px
+            rgba(0, 0, 0, 0.06);
+        }
+
+        .leadHeader {
           display: flex;
-          gap: 18px;
           align-items: center;
+          gap: 20px;
+          margin-bottom: 24px;
         }
 
         .avatar {
-          width: 68px;
-          height: 68px;
+          width: 70px;
+          height: 70px;
           border-radius: 50%;
-          background: #e8efff;
+          background: #e7efff;
           color: #145cff;
           display: flex;
           align-items: center;
           justify-content: center;
           font-size: 30px;
-          font-weight: 950;
+          font-weight: bold;
         }
 
-        .lead-card h2 {
-          color: #0f172a;
+        .leadInfo {
+          flex: 1;
+        }
+
+        .leadInfo h2 {
           margin: 0;
-          font-size: 26px;
-          font-weight: 950;
+          font-size: 28px;
         }
 
-        .lead-card p {
+        .subInfo {
           color: #64748b;
-          margin: 7px 0 0;
-          font-size: 17px;
-          font-weight: 650;
+          margin-top: 6px;
         }
 
-        .priority {
-          background: #ffe5e7;
-          color: #e11d28;
-          font-size: 16px;
-          font-weight: 900;
-          padding: 12px 18px;
+        .urgency {
+          background: #fee2e2;
+          color: #dc2626;
+          padding: 10px 16px;
           border-radius: 999px;
+          font-weight: bold;
         }
 
-        .lead-body {
-          border-top: 1px solid #e5eaf2;
-          border-bottom: 1px solid #e5eaf2;
+        .grid {
           display: grid;
-          grid-template-columns: 1fr 1.4fr 1.2fr;
-        }
-
-        .info-block {
-          padding: 28px;
-          display: flex;
-          gap: 18px;
-          border-right: 1px solid #e5eaf2;
-        }
-
-        .info-block:last-child {
-          border-right: 0;
-        }
-
-        .info-icon {
-          width: 52px;
-          height: 52px;
-          border-radius: 14px;
-          background: #edf3ff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 23px;
-          flex-shrink: 0;
-        }
-
-        .info-title {
-          color: #64748b;
-          font-size: 13px;
-          text-transform: uppercase;
-          font-weight: 950;
-          letter-spacing: 0.05em;
-          margin-bottom: 10px;
-        }
-
-        .info-value {
-          color: #0f172a;
-          font-size: 18px;
-          font-weight: 850;
-          line-height: 1.45;
-        }
-
-        .email {
-          margin-top: 8px;
-          word-break: break-all;
-        }
-
-        .lead-footer {
-          padding: 24px 32px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+          grid-template-columns:
+            repeat(
+              auto-fit,
+              minmax(240px, 1fr)
+            );
           gap: 20px;
         }
 
-        .status-row {
-          display: flex;
-          align-items: center;
-          gap: 16px;
+        .infoBlock {
+          background: #f8fafc;
+          border-radius: 20px;
+          padding: 20px;
         }
 
-        .status-pill {
-          background: #eef4ff;
-          color: #145cff;
-          font-weight: 950;
-          padding: 11px 18px;
-          border-radius: 999px;
-        }
-
-        .date-text {
+        .infoTitle {
+          font-size: 13px;
+          text-transform: uppercase;
           color: #64748b;
-          font-weight: 700;
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+
+        .infoValue {
+          font-size: 18px;
+          font-weight: bold;
+          color: #0f172a;
+        }
+
+        .messageBox {
+          background: #eff6ff;
+          border-radius: 22px;
+          padding: 24px;
+          margin-top: 24px;
+        }
+
+        .messageTitle {
+          font-weight: bold;
+          margin-bottom: 12px;
+          color: #145cff;
+        }
+
+        .messageText {
+          white-space: pre-wrap;
+          line-height: 1.6;
         }
 
         .actions {
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: 14px;
-          min-width: 560px;
+          grid-template-columns:
+            repeat(
+              auto-fit,
+              minmax(180px, 1fr)
+            );
+          gap: 16px;
+          margin-top: 26px;
         }
 
-        .call-button,
-        .whatsapp-button,
-        .mail-button,
-        .disabled-button {
+        .callButton,
+        .whatsappButton,
+        .mailButton,
+        .doneButton {
+          border: none;
+          border-radius: 18px;
+          padding: 18px;
+          font-size: 16px;
+          font-weight: bold;
+          cursor: pointer;
           text-decoration: none;
           text-align: center;
-          padding: 17px 20px;
-          border-radius: 16px;
-          font-size: 17px;
-          font-weight: 950;
         }
 
-        .call-button {
-          background: #071226;
+        .callButton {
+          background: #111827;
           color: white;
         }
 
-        .whatsapp-button {
+        .whatsappButton {
           background: #22c55e;
           color: white;
         }
 
-        .mail-button {
+        .mailButton {
           background: #145cff;
           color: white;
         }
 
-        .disabled-button {
-          background: #f1f5f9;
-          color: #94a3b8;
-        }
-
-        .message-card {
-          background: white;
+        .doneButton {
+          background: #e2e8f0;
           color: #0f172a;
-          padding: 28px;
-          border-radius: 28px;
-          font-size: 18px;
-          font-weight: 800;
         }
 
-        .message-card.error {
-          background: #fef2f2;
+        .messageCard,
+        .errorCard {
+          background: white;
+          padding: 24px;
+          border-radius: 20px;
+          margin-bottom: 20px;
+        }
+
+        .errorCard {
+          background: #fee2e2;
           color: #b91c1c;
         }
 
-        @media (max-width: 800px) {
-          .hero-inner {
+        @media (max-width: 768px) {
+          h1 {
+            font-size: 38px;
+          }
+
+          .heroContent {
             flex-direction: column;
             align-items: flex-start;
           }
 
-          h1 {
-            font-size: 42px;
-          }
-
-          .new-button {
+          .newButton {
             width: 100%;
             text-align: center;
           }
 
-          .stats-grid {
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .lead-body {
-            grid-template-columns: 1fr;
-          }
-
-          .info-block {
-            border-right: 0;
-            border-bottom: 1px solid #e5eaf2;
-          }
-
-          .lead-footer {
+          .leadHeader {
             flex-direction: column;
-            align-items: stretch;
-          }
-
-          .actions {
-            min-width: 0;
-            width: 100%;
-            grid-template-columns: 1fr;
+            align-items: flex-start;
           }
         }
       `}</style>
-    </>
+    </main>
   );
 }
 
 function StatCard({
-  icon,
-  label,
-  value,
-  sub,
-}: {
-  icon: string;
-  label: string;
-  value: number;
-  sub: string;
-}) {
-  return (
-    <div className="stat-card">
-      <div className="stat-icon">{icon}</div>
-      <div>
-        <div className="stat-label">{label}</div>
-        <div className="stat-value">{value}</div>
-        <div className="stat-sub">{sub}</div>
-      </div>
-    </div>
-  );
-}
-
-function InfoBlock({
   icon,
   title,
   value,
 }: {
   icon: string;
   title: string;
+  value: number;
+}) {
+  return (
+    <div className="statCard">
+      <div className="statIcon">
+        {icon}
+      </div>
+
+      <div className="statTitle">
+        {title}
+      </div>
+
+      <div className="statValue">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function InfoBlock({
+  title,
+  value,
+}: {
+  title: string;
   value: string;
 }) {
   return (
-    <div className="info-block">
-      <div className="info-icon">{icon}</div>
-      <div>
-        <div className="info-title">{title}</div>
-        <div className="info-value">{value}</div>
+    <div className="infoBlock">
+      <div className="infoTitle">
+        {title}
+      </div>
+
+      <div className="infoValue">
+        {value}
       </div>
     </div>
   );
