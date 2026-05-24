@@ -24,68 +24,27 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function loadLeads() {
-    try {
-      const res = await fetch("/api/leads");
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Leads konnten nicht geladen werden.");
-      }
-
-      const data = await res.json();
-
-      // NUR offene Leads anzeigen
-      const filtered = data.filter(
-        (lead: Lead) =>
-          lead.status?.toLowerCase() !== "erledigt"
-      );
-
-      setLeads(filtered);
-    } catch (err: any) {
-      setError(err.message || "Fehler beim Laden.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
+    async function loadLeads() {
+      try {
+        const res = await fetch("/api/leads");
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Leads konnten nicht geladen werden.");
+        }
+        setLeads(await res.json());
+      } catch (err: any) {
+        setError(err.message || "Fehler beim Laden.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
     loadLeads();
   }, []);
 
-  async function updateStatus(id: number, status: string) {
-    try {
-      const res = await fetch("/api/leads", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id,
-          status,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Status konnte nicht geändert werden.");
-      }
-
-      // SOFORT aus Dashboard entfernen
-      setLeads((prev) =>
-        prev.filter((lead) => lead.id !== id)
-      );
-    } catch (err) {
-      console.error(err);
-      alert("Fehler beim Aktualisieren.");
-    }
-  }
-
-  function mailtoLink(lead: Lead) {
-    const subject = `Ihre Anfrage${
-      lead.trade ? ` - ${lead.trade}` : ""
-    }`;
-
-    const body =
+  function getReplyText(lead: Lead) {
+    return (
       lead.suggested_reply ||
       `Hallo ${lead.customer_name || ""},
 
@@ -93,11 +52,29 @@ vielen Dank für Ihre Anfrage.
 
 Wir melden uns schnellstmöglich bei Ihnen.
 
-Viele Grüße`;
+Viele Grüße`
+    );
+  }
+
+  function mailtoLink(lead: Lead) {
+    const subject = `Ihre Anfrage${lead.trade ? ` - ${lead.trade}` : ""}`;
+    const body = getReplyText(lead);
 
     return `mailto:${lead.email}?subject=${encodeURIComponent(
       subject
     )}&body=${encodeURIComponent(body)}`;
+  }
+
+  function whatsappLink(lead: Lead) {
+    let phone = lead.phone.replace(/\D/g, "");
+
+    if (phone.startsWith("0")) {
+      phone = "49" + phone.slice(1);
+    }
+
+    const message = getReplyText(lead);
+
+    return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
   }
 
   const urgentCount = leads.filter(
@@ -108,22 +85,20 @@ Viele Grüße`;
     (lead) => lead.status?.toLowerCase() === "neu"
   ).length;
 
+  const todayCount = leads.filter((lead) => {
+    if (!lead.created_at) return false;
+    return new Date(lead.created_at).toDateString() === new Date().toDateString();
+  }).length;
+
   return (
     <>
       <main className="dashboard-page">
         <section className="hero">
           <div className="container hero-inner">
             <div>
-              <div className="app-badge">
-                ✨ KI-ANFRAGE-ASSISTENT
-              </div>
-
+              <div className="app-badge">✨ KI-ANFRAGE-ASSISTENT</div>
               <h1>Dashboard</h1>
-
-              <p>
-                Neue Kundenanfragen automatisch analysiert
-                und vorbereitet.
-              </p>
+              <p>Neue Kundenanfragen, automatisch analysiert und vorbereitet.</p>
             </div>
 
             <a href="/" className="new-button">
@@ -135,44 +110,16 @@ Viele Grüße`;
         <section className="content">
           <div className="container">
             <div className="stats-grid">
-              <StatCard
-                icon="👥"
-                label="Leads"
-                value={leads.length}
-                sub="Offene Leads"
-              />
-
-              <StatCard
-                icon="📞"
-                label="Dringend"
-                value={urgentCount}
-                sub="Hohe Priorität"
-              />
-
-              <StatCard
-                icon="⚡"
-                label="Neu"
-                value={newCount}
-                sub="Neue Anfragen"
-              />
+              <StatCard icon="👥" label="Leads" value={leads.length} sub="Gesamt" />
+              <StatCard icon="📞" label="Dringend" value={urgentCount} sub="Hohe Priorität" />
+              <StatCard icon="⚡" label="Neu" value={newCount} sub="Ungelesene" />
+              <StatCard icon="📅" label="Heute" value={todayCount} sub="Neue Leads" />
             </div>
 
-            {loading && (
-              <div className="message-card">
-                Lade Leads...
-              </div>
-            )}
-
-            {error && (
-              <div className="message-card error">
-                {error}
-              </div>
-            )}
-
+            {loading && <div className="message-card">Lade Leads...</div>}
+            {error && <div className="message-card error">{error}</div>}
             {!loading && !error && leads.length === 0 && (
-              <div className="message-card">
-                Keine offenen Leads vorhanden.
-              </div>
+              <div className="message-card">Noch keine Leads vorhanden.</div>
             )}
 
             {!loading && !error && leads.length > 0 && (
@@ -192,55 +139,27 @@ Viele Grüße`;
                         </div>
 
                         <div>
-                          <h2>
-                            {lead.customer_name ||
-                              "Unbekannter Kunde"}
-                          </h2>
-
-                          <p>
-                            📍{" "}
-                            {lead.city ||
-                              "Kein Ort angegeben"}
-                          </p>
+                          <h2>{lead.customer_name || "Unbekannter Kunde"}</h2>
+                          <p>📍 {lead.city || "Kein Ort angegeben"}</p>
                         </div>
                       </div>
 
-                      <div className="priority">
-                        ● {lead.urgency || "normal"}
-                      </div>
+                      <div className="priority">● {lead.urgency || "normal"}</div>
                     </div>
 
                     <div className="lead-body">
-                      <InfoBlock
-                        icon="🔧"
-                        title="Gewerk"
-                        value={lead.trade || "-"}
-                      />
-
-                      <InfoBlock
-                        icon="📄"
-                        title="Zusammenfassung"
-                        value={lead.summary || "-"}
-                      />
+                      <InfoBlock icon="🔧" title="Gewerk" value={lead.trade || "-"} />
+                      <InfoBlock icon="📄" title="Zusammenfassung" value={lead.summary || "-"} />
 
                       <div className="info-block">
-                        <div className="info-icon">
-                          ☎️
-                        </div>
-
+                        <div className="info-icon">☎️</div>
                         <div>
-                          <div className="info-title">
-                            Kontakt
-                          </div>
-
+                          <div className="info-title">Kontakt</div>
                           <div className="info-value">
-                            {lead.phone ||
-                              "Keine Telefonnummer"}
+                            {lead.phone || "Keine Telefonnummer"}
                           </div>
-
                           <div className="info-value email">
-                            {lead.email ||
-                              "Keine E-Mail"}
+                            {lead.email || "Keine E-Mail"}
                           </div>
                         </div>
                       </div>
@@ -248,16 +167,11 @@ Viele Grüße`;
 
                     <div className="lead-footer">
                       <div className="status-row">
-                        <span className="status-pill">
-                          {lead.status || "neu"}
-                        </span>
-
+                        <span className="status-pill">{lead.status || "neu"}</span>
                         <span className="date-text">
                           {lead.created_at
-                            ? new Date(
-                                lead.created_at
-                              ).toLocaleString("de-DE")
-                            : ""}
+                            ? new Date(lead.created_at).toLocaleString("de-DE")
+                            : "Gerade eben"}
                         </span>
                       </div>
 
@@ -265,47 +179,40 @@ Viele Grüße`;
                         {lead.phone ? (
                           <a
                             href={`tel:${lead.phone}`}
-                            onClick={(e) =>
-                              e.stopPropagation()
-                            }
+                            onClick={(e) => e.stopPropagation()}
                             className="call-button"
                           >
                             📞 Anrufen
                           </a>
                         ) : (
-                          <span className="disabled-button">
-                            Keine Nummer
-                          </span>
+                          <span className="disabled-button">Keine Nummer</span>
+                        )}
+
+                        {lead.phone ? (
+                          <a
+                            href={whatsappLink(lead)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="whatsapp-button"
+                          >
+                            💬 WhatsApp
+                          </a>
+                        ) : (
+                          <span className="disabled-button">Kein WhatsApp</span>
                         )}
 
                         {lead.email ? (
                           <a
                             href={mailtoLink(lead)}
-                            onClick={(e) =>
-                              e.stopPropagation()
-                            }
+                            onClick={(e) => e.stopPropagation()}
                             className="mail-button"
                           >
                             ✉️ E-Mail
                           </a>
                         ) : (
-                          <span className="disabled-button">
-                            Keine Mail
-                          </span>
+                          <span className="disabled-button">Keine Mail</span>
                         )}
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            updateStatus(
-                              lead.id,
-                              "erledigt"
-                            );
-                          }}
-                          className="done-button"
-                        >
-                          ✅ Erledigt
-                        </button>
                       </div>
                     </div>
                   </article>
@@ -321,7 +228,8 @@ Viele Grüße`;
           min-height: 100vh;
           background: #f4f7fb;
           color: #0f172a;
-          font-family: Inter, system-ui, sans-serif;
+          font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+            "Segoe UI", sans-serif;
         }
 
         .container {
@@ -336,7 +244,6 @@ Viele Grüße`;
             #071226 45%,
             #050b16 100%
           );
-
           color: white;
           padding: 34px 22px 125px;
         }
@@ -344,40 +251,44 @@ Viele Grüße`;
         .hero-inner {
           display: flex;
           justify-content: space-between;
-          align-items: center;
           gap: 24px;
+          align-items: center;
         }
 
         .app-badge {
           display: inline-flex;
           background: #145cff;
+          color: white;
+          font-weight: 900;
           padding: 10px 16px;
           border-radius: 14px;
-          font-weight: 900;
           margin-bottom: 20px;
         }
 
         h1 {
           font-size: 56px;
-          font-weight: 950;
+          line-height: 1;
           margin: 0;
           color: white;
+          font-weight: 950;
+          letter-spacing: -0.04em;
         }
 
         .hero p {
-          margin-top: 16px;
-          color: rgba(255,255,255,0.9);
+          margin-top: 18px;
+          color: rgba(255, 255, 255, 0.9);
           font-size: 20px;
+          font-weight: 500;
         }
 
         .new-button {
           background: #145cff;
           color: white;
           text-decoration: none;
+          font-weight: 900;
+          font-size: 19px;
           padding: 22px 34px;
           border-radius: 20px;
-          font-size: 18px;
-          font-weight: 900;
           white-space: nowrap;
         }
 
@@ -388,19 +299,19 @@ Viele Grüße`;
 
         .stats-grid {
           display: grid;
-          grid-template-columns: repeat(3,1fr);
+          grid-template-columns: repeat(4, 1fr);
           gap: 18px;
           margin-bottom: 36px;
         }
 
         .stat-card {
           background: white;
+          border: 1px solid #e5eaf2;
           border-radius: 26px;
           padding: 28px;
           display: flex;
-          align-items: center;
           gap: 18px;
-          box-shadow: 0 20px 50px rgba(15,23,42,0.08);
+          align-items: center;
         }
 
         .stat-icon {
@@ -415,20 +326,21 @@ Viele Grüße`;
         }
 
         .stat-label {
-          color: #64748b;
-          font-size: 15px;
-          font-weight: 700;
+          color: #475569;
+          font-size: 16px;
+          font-weight: 800;
         }
 
         .stat-value {
+          color: #0f172a;
           font-size: 40px;
           font-weight: 950;
-          color: #0f172a;
         }
 
         .stat-sub {
-          color: #94a3b8;
+          color: #64748b;
           font-size: 14px;
+          font-weight: 600;
         }
 
         .lead-list {
@@ -438,16 +350,17 @@ Viele Grüße`;
 
         .lead-card {
           background: white;
+          border: 1px solid #e5eaf2;
           border-radius: 32px;
           overflow: hidden;
-          box-shadow: 0 20px 50px rgba(15,23,42,0.08);
+          cursor: pointer;
         }
 
         .lead-head {
           padding: 28px 32px;
           display: flex;
           justify-content: space-between;
-          align-items: flex-start;
+          gap: 20px;
         }
 
         .lead-person {
@@ -470,23 +383,26 @@ Viele Grüße`;
         }
 
         .lead-card h2 {
+          color: #0f172a;
           margin: 0;
           font-size: 26px;
           font-weight: 950;
         }
 
         .lead-card p {
-          margin-top: 7px;
           color: #64748b;
+          margin: 7px 0 0;
           font-size: 17px;
+          font-weight: 650;
         }
 
         .priority {
           background: #ffe5e7;
           color: #e11d28;
+          font-size: 16px;
+          font-weight: 900;
           padding: 12px 18px;
           border-radius: 999px;
-          font-weight: 900;
         }
 
         .lead-body {
@@ -503,6 +419,10 @@ Viele Grüße`;
           border-right: 1px solid #e5eaf2;
         }
 
+        .info-block:last-child {
+          border-right: 0;
+        }
+
         .info-icon {
           width: 52px;
           height: 52px;
@@ -511,21 +431,24 @@ Viele Grüße`;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 22px;
+          font-size: 23px;
+          flex-shrink: 0;
         }
 
         .info-title {
           color: #64748b;
-          font-size: 12px;
+          font-size: 13px;
           text-transform: uppercase;
-          font-weight: 900;
-          margin-bottom: 8px;
+          font-weight: 950;
+          letter-spacing: 0.05em;
+          margin-bottom: 10px;
         }
 
         .info-value {
-          font-size: 18px;
-          font-weight: 800;
           color: #0f172a;
+          font-size: 18px;
+          font-weight: 850;
+          line-height: 1.45;
         }
 
         .email {
@@ -550,9 +473,9 @@ Viele Grüße`;
         .status-pill {
           background: #eef4ff;
           color: #145cff;
+          font-weight: 950;
           padding: 11px 18px;
           border-radius: 999px;
-          font-weight: 900;
         }
 
         .date-text {
@@ -568,17 +491,15 @@ Viele Grüße`;
         }
 
         .call-button,
+        .whatsapp-button,
         .mail-button,
-        .done-button,
         .disabled-button {
-          border: 0;
           text-decoration: none;
           text-align: center;
-          padding: 17px 24px;
-          border-radius: 18px;
-          font-size: 16px;
-          font-weight: 900;
-          cursor: pointer;
+          padding: 17px 20px;
+          border-radius: 16px;
+          font-size: 17px;
+          font-weight: 950;
         }
 
         .call-button {
@@ -586,13 +507,13 @@ Viele Grüße`;
           color: white;
         }
 
-        .mail-button {
-          background: #145cff;
+        .whatsapp-button {
+          background: #22c55e;
           color: white;
         }
 
-        .done-button {
-          background: #16a34a;
+        .mail-button {
+          background: #145cff;
           color: white;
         }
 
@@ -603,18 +524,19 @@ Viele Grüße`;
 
         .message-card {
           background: white;
+          color: #0f172a;
           padding: 28px;
           border-radius: 28px;
           font-size: 18px;
           font-weight: 800;
         }
 
-        .error {
+        .message-card.error {
           background: #fef2f2;
           color: #b91c1c;
         }
 
-        @media (max-width: 900px) {
+        @media (max-width: 800px) {
           .hero-inner {
             flex-direction: column;
             align-items: flex-start;
@@ -624,12 +546,22 @@ Viele Grüße`;
             font-size: 42px;
           }
 
+          .new-button {
+            width: 100%;
+            text-align: center;
+          }
+
           .stats-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr 1fr;
           }
 
           .lead-body {
             grid-template-columns: 1fr;
+          }
+
+          .info-block {
+            border-right: 0;
+            border-bottom: 1px solid #e5eaf2;
           }
 
           .lead-footer {
@@ -661,22 +593,11 @@ function StatCard({
 }) {
   return (
     <div className="stat-card">
-      <div className="stat-icon">
-        {icon}
-      </div>
-
+      <div className="stat-icon">{icon}</div>
       <div>
-        <div className="stat-label">
-          {label}
-        </div>
-
-        <div className="stat-value">
-          {value}
-        </div>
-
-        <div className="stat-sub">
-          {sub}
-        </div>
+        <div className="stat-label">{label}</div>
+        <div className="stat-value">{value}</div>
+        <div className="stat-sub">{sub}</div>
       </div>
     </div>
   );
@@ -693,18 +614,10 @@ function InfoBlock({
 }) {
   return (
     <div className="info-block">
-      <div className="info-icon">
-        {icon}
-      </div>
-
+      <div className="info-icon">{icon}</div>
       <div>
-        <div className="info-title">
-          {title}
-        </div>
-
-        <div className="info-value">
-          {value}
-        </div>
+        <div className="info-title">{title}</div>
+        <div className="info-value">{value}</div>
       </div>
     </div>
   );
