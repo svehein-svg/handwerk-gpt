@@ -33,7 +33,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/leads");
 
       if (!res.ok) {
-        throw new Error("Fehler beim Laden");
+        throw new Error("Fehler beim Laden der Anfragen");
       }
 
       const data = await res.json();
@@ -45,42 +45,23 @@ export default function DashboardPage() {
     }
   }
 
-  // AUTOMATISCHE KI-ANTWORT
   function createReply(lead: Lead) {
-    const customer =
-      lead.customer_name || "Guten Tag";
-
+    const customer = lead.customer_name || "Guten Tag";
     const missingFields: string[] = [];
 
-    // Telefonnummer prüfen
-    if (
-      !lead.phone ||
-      lead.phone.trim() === ""
-    ) {
+    if (!lead.phone || lead.phone.trim() === "") {
       missingFields.push("Telefonnummer");
     }
 
-    // E-Mail prüfen
-    if (
-      !lead.email ||
-      lead.email.trim() === ""
-    ) {
+    if (!lead.email || lead.email.trim() === "") {
       missingFields.push("E-Mail-Adresse");
     }
 
-    // Ort prüfen
-    if (
-      !lead.city ||
-      lead.city.trim() === ""
-    ) {
+    if (!lead.city || lead.city.trim() === "") {
       missingFields.push("Ort / Adresse");
     }
 
-    // Weitere fehlende Infos
-    if (
-      lead.missing_info &&
-      Array.isArray(lead.missing_info)
-    ) {
+    if (lead.missing_info && Array.isArray(lead.missing_info)) {
       lead.missing_info.forEach((info) => {
         if (!missingFields.includes(info)) {
           missingFields.push(info);
@@ -88,7 +69,6 @@ export default function DashboardPage() {
       });
     }
 
-    // FEHLENDE INFOS
     if (missingFields.length > 0) {
       return `Hallo ${customer},
 
@@ -96,79 +76,51 @@ vielen Dank für Ihre Anfrage.
 
 Damit wir Ihre Anfrage schneller bearbeiten können, benötigen wir noch folgende Informationen:
 
-${missingFields
-  .map((f) => `• ${f}`)
-  .join("\n")}
+${missingFields.map((f) => `• ${f}`).join("\n")}
 
 Vielen Dank.
 
 Freundliche Grüße`;
     }
 
-    // KI Antwort verwenden
-    if (
-      lead.suggested_reply &&
-      lead.suggested_reply.trim() !== ""
-    ) {
+    if (lead.suggested_reply && lead.suggested_reply.trim() !== "") {
       return lead.suggested_reply;
     }
 
-    // Standardantwort
     return `Hallo ${customer},
 
-vielen Dank für Ihre Anfrage bezüglich ${
-      lead.trade || "Ihres Anliegens"
-    }.
+vielen Dank für Ihre Anfrage bezüglich ${lead.trade || "Ihres Anliegens"}.
 
 Wir melden uns schnellstmöglich bei Ihnen.
 
 Freundliche Grüße`;
   }
 
-  // WHATSAPP LINK
-  function createWhatsAppLink(
-    lead: Lead
-  ) {
+  function createWhatsAppLink(lead: Lead) {
     let phone = lead.phone || "";
-
     phone = phone.replace(/\D/g, "");
 
     if (phone.startsWith("0")) {
-      phone =
-        "49" + phone.substring(1);
+      phone = "49" + phone.substring(1);
     }
 
-    const message = createReply(lead);
-
-    return `https://wa.me/${phone}?text=${encodeURIComponent(
-      message
-    )}`;
+    return `https://wa.me/${phone}?text=${encodeURIComponent(createReply(lead))}`;
   }
 
-  // MAIL LINK
   function createMailLink(lead: Lead) {
-    const subject = `Ihre Anfrage - ${
-      lead.trade ||
-      "Handwerkeranfrage"
-    }`;
+    const subject = `Ihre Anfrage - ${lead.trade || "Handwerkeranfrage"}`;
 
-    return `mailto:${
-      lead.email
-    }?subject=${encodeURIComponent(
+    return `mailto:${lead.email}?subject=${encodeURIComponent(
       subject
-    )}&body=${encodeURIComponent(
-      createReply(lead)
-    )}`;
+    )}&body=${encodeURIComponent(createReply(lead))}`;
   }
 
-  // ERLEDIGT
   async function markAsDone(id: number) {
     try {
       await fetch(`/api/leads/${id}`, {
         method: "PATCH",
         headers: {
-          "Content-Type":
-            "application/json",
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           status: "erledigt",
@@ -177,12 +129,7 @@ Freundliche Grüße`;
 
       setLeads((prev) =>
         prev.map((lead) =>
-          lead.id === id
-            ? {
-                ...lead,
-                status: "erledigt",
-              }
-            : lead
+          lead.id === id ? { ...lead, status: "erledigt" } : lead
         )
       );
     } catch (err) {
@@ -190,38 +137,34 @@ Freundliche Grüße`;
     }
   }
 
-  const activeLeads = leads.filter(
-    (lead) =>
-      lead.status !== "erledigt"
-  );
+  const activeLeads = leads.filter((lead) => lead.status !== "erledigt");
+  const doneLeads = leads.filter((lead) => lead.status === "erledigt");
 
-  const doneLeads = leads.filter(
-    (lead) =>
-      lead.status === "erledigt"
-  );
+  const todayCount = leads.filter((lead) => {
+    if (!lead.created_at) return false;
+
+    return (
+      new Date(lead.created_at).toDateString() === new Date().toDateString()
+    );
+  }).length;
+
+  const urgentCount = activeLeads.filter(
+    (lead) => lead.urgency?.toLowerCase() === "hoch"
+  ).length;
 
   return (
     <main className="page">
       <section className="hero">
         <div className="heroContent">
           <div>
-            <div className="badge">
-              ✨ KI Anfrage Assistent
-            </div>
+            <div className="badge">✨ KI Anfrage Assistent</div>
 
             <h1>Handwerker Dashboard</h1>
 
-            <p>
-              KI Antworten,
-              WhatsApp Integration und
-              Kundenverwaltung.
-            </p>
+            <p>KI Antworten, WhatsApp Integration und Kundenverwaltung.</p>
           </div>
 
-          <a
-            className="newButton"
-            href="/"
-          >
+          <a className="newButton" href="/">
             + Neue Anfrage
           </a>
         </div>
@@ -229,143 +172,72 @@ Freundliche Grüße`;
 
       <section className="content">
         <div className="statsGrid">
-          <StatCard
-            icon="📨"
-            title="Anfragen"
-            value={activeLeads.length}
-          />
-
-          <StatCard
-            icon="⚡"
-            title="Dringend"
-            value={
-              activeLeads.filter(
-                (l) =>
-                  l.urgency?.toLowerCase() ===
-                  "hoch"
-              ).length
-            }
-          />
-
-          <StatCard
-            icon="✅"
-            title="Erledigt"
-            value={doneLeads.length}
-          />
-
-          <StatCard
-            icon="📅"
-            title="Heute"
-            value={
-              leads.filter((lead) => {
-                if (
-                  !lead.created_at
-                )
-                  return false;
-
-                return (
-                  new Date(
-                    lead.created_at
-                  ).toDateString() ===
-                  new Date().toDateString()
-                );
-              }).length
-            }
-          />
+          <StatCard icon="📨" title="Anfragen" value={activeLeads.length} />
+          <StatCard icon="⚡" title="Dringend" value={urgentCount} />
+          <StatCard icon="✅" title="Erledigt" value={doneLeads.length} />
+          <StatCard icon="📅" title="Heute" value={todayCount} />
         </div>
 
-        {loading && (
-          <div className="messageCard">
-            Lade Daten...
-          </div>
-        )}
+        {loading && <div className="messageCard">Lade Daten...</div>}
 
-        {error && (
-          <div className="errorCard">
-            {error}
-          </div>
+        {error && <div className="errorCard">{error}</div>}
+
+        {!loading && activeLeads.length === 0 && !error && (
+          <div className="messageCard">Aktuell keine offenen Anfragen.</div>
         )}
 
         {!loading &&
           activeLeads.map((lead) => (
-            <div
-              className="leadCard"
-              key={lead.id}
-            >
+            <div className="leadCard" key={lead.id}>
               <div className="leadHeader">
                 <div className="avatar">
-                  {lead.customer_name?.charAt(
-                    0
-                  ) || "?"}
+                  {lead.customer_name?.charAt(0) || "?"}
                 </div>
 
                 <div className="leadInfo">
-                  <h2>
-                    {lead.customer_name ||
-                      "Unbekannter Kunde"}
-                  </h2>
+                  <h2>{lead.customer_name || "Unbekannter Kunde"}</h2>
 
-                  <div className="subInfo">
-                    📍{" "}
-                    {lead.city ||
-                      "Kein Ort"}
-                  </div>
+                  <div className="subInfo">📍 {lead.city || "Kein Ort"}</div>
                 </div>
 
-                <div className="urgency">
-                  {lead.urgency ||
-                    "normal"}
+                <div
+                  className={
+                    lead.urgency?.toLowerCase() === "hoch"
+                      ? "urgency urgencyHigh"
+                      : "urgency"
+                  }
+                >
+                  {lead.urgency || "normal"}
                 </div>
               </div>
 
               <div className="grid">
-                <InfoBlock
-                  title="Gewerk"
-                  value={
-                    lead.trade || "-"
-                  }
-                />
+                <InfoBlock title="Gewerk" value={lead.trade || "-"} />
 
                 <InfoBlock
                   title="Zusammenfassung"
-                  value={
-                    lead.summary || "-"
-                  }
+                  value={lead.summary || "-"}
                 />
 
-                <InfoBlock
-                  title="Telefon"
-                  value={
-                    lead.phone || "-"
-                  }
-                />
+                <InfoBlock title="Telefon" value={lead.phone || "-"} />
               </div>
 
               <div className="messageBox">
-                <div className="messageTitle">
-                  KI Antwortvorschlag
-                </div>
+                <div className="messageTitle">KI Antwortvorschlag</div>
 
-                <div className="messageText">
-                  {createReply(lead)}
-                </div>
+                <div className="messageText">{createReply(lead)}</div>
               </div>
 
               <div className="actions">
                 {lead.phone && (
-                  <a
-                    href={`tel:${lead.phone}`}
-                    className="callButton"
-                  >
+                  <a href={`tel:${lead.phone}`} className="callButton">
                     📞 Anrufen
                   </a>
                 )}
 
                 {lead.phone && (
                   <a
-                    href={createWhatsAppLink(
-                      lead
-                    )}
+                    href={createWhatsAppLink(lead)}
                     target="_blank"
                     className="whatsappButton"
                   >
@@ -374,20 +246,13 @@ Freundliche Grüße`;
                 )}
 
                 {lead.email && (
-                  <a
-                    href={createMailLink(
-                      lead
-                    )}
-                    className="mailButton"
-                  >
+                  <a href={createMailLink(lead)} className="mailButton">
                     ✉️ E-Mail senden
                   </a>
                 )}
 
                 <button
-                  onClick={() =>
-                    markAsDone(lead.id)
-                  }
+                  onClick={() => markAsDone(lead.id)}
                   className="doneButton"
                 >
                   ✅ Erledigt
@@ -400,126 +265,140 @@ Freundliche Grüße`;
       <style jsx>{`
         .page {
           min-height: 100vh;
-          background: #f3f6fb;
-          font-family: Arial,
-            sans-serif;
+          background: #eef3f9;
+          font-family: Inter, Arial, sans-serif;
+          color: #0f172a;
         }
 
         .hero {
-          background: linear-gradient(
-            135deg,
-            #081224,
-            #123c80
-          );
-          padding: 40px 20px 120px;
+          background: linear-gradient(135deg, #07152d, #145cff);
+          padding: 48px 24px 130px;
           color: white;
         }
 
         .heroContent {
-          max-width: 1200px;
+          max-width: 1280px;
           margin: 0 auto;
           display: flex;
           justify-content: space-between;
-          gap: 20px;
+          gap: 24px;
           align-items: center;
         }
 
         .badge {
-          display: inline-block;
-          background: #145cff;
-          padding: 10px 16px;
-          border-radius: 14px;
-          font-weight: bold;
-          margin-bottom: 20px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          background: rgba(255, 255, 255, 0.14);
+          backdrop-filter: blur(10px);
+          padding: 12px 18px;
+          border-radius: 16px;
+          font-weight: 800;
+          margin-bottom: 24px;
+          font-size: 16px;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18);
         }
 
         h1 {
-          font-size: 54px;
+          font-size: 72px;
+          line-height: 1;
           margin: 0;
+          font-weight: 850;
+          letter-spacing: -2px;
         }
 
         p {
-          font-size: 20px;
-          opacity: 0.9;
+          font-size: 24px;
+          opacity: 0.96;
+          margin-top: 18px;
+          max-width: 760px;
+          line-height: 1.5;
         }
 
         .newButton {
-          background: #145cff;
-          color: white;
-          padding: 18px 28px;
-          border-radius: 18px;
+          background: white;
+          color: #145cff;
+          padding: 20px 30px;
+          border-radius: 22px;
           text-decoration: none;
-          font-weight: bold;
+          font-weight: 850;
+          font-size: 18px;
+          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+          transition: 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .newButton:hover {
+          transform: translateY(-2px);
         }
 
         .content {
-          max-width: 1200px;
-          margin: -70px auto 0;
-          padding: 0 20px 50px;
+          max-width: 1280px;
+          margin: -80px auto 0;
+          padding: 0 20px 60px;
         }
 
         .statsGrid {
           display: grid;
-          grid-template-columns:
-            repeat(
-              auto-fit,
-              minmax(220px, 1fr)
-            );
-          gap: 20px;
-          margin-bottom: 30px;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 22px;
+          margin-bottom: 34px;
         }
 
         .statCard {
           background: white;
-          border-radius: 24px;
-          padding: 24px;
-          box-shadow: 0 8px 20px
-            rgba(0, 0, 0, 0.06);
+          border-radius: 28px;
+          padding: 30px;
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+          border: 1px solid #dbe3ee;
         }
 
         .statIcon {
-          font-size: 32px;
-          margin-bottom: 12px;
+          font-size: 34px;
+          margin-bottom: 14px;
         }
 
         .statTitle {
-          color: #64748b;
-          font-weight: bold;
+          color: #334155;
+          font-size: 17px;
+          font-weight: 800;
         }
 
         .statValue {
-          font-size: 40px;
-          font-weight: bold;
-          margin-top: 10px;
+          font-size: 46px;
+          font-weight: 850;
+          margin-top: 12px;
+          color: #0f172a;
         }
 
         .leadCard {
           background: white;
-          border-radius: 30px;
-          padding: 28px;
-          margin-bottom: 26px;
-          box-shadow: 0 10px 30px
-            rgba(0, 0, 0, 0.06);
+          border-radius: 34px;
+          padding: 34px;
+          margin-bottom: 30px;
+          border: 1px solid #dbe3ee;
+          box-shadow: 0 18px 45px rgba(15, 23, 42, 0.09);
         }
 
         .leadHeader {
           display: flex;
           align-items: center;
-          gap: 20px;
-          margin-bottom: 24px;
+          gap: 22px;
+          margin-bottom: 28px;
         }
 
         .avatar {
-          width: 70px;
-          height: 70px;
+          width: 82px;
+          height: 82px;
           border-radius: 50%;
-          background: #e7efff;
+          background: linear-gradient(135deg, #dbeafe, #bfdbfe);
           color: #145cff;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 30px;
-          font-weight: bold;
+          font-size: 34px;
+          font-weight: 850;
+          flex-shrink: 0;
         }
 
         .leadInfo {
@@ -528,79 +407,91 @@ Freundliche Grüße`;
 
         .leadInfo h2 {
           margin: 0;
-          font-size: 28px;
+          font-size: 42px;
+          font-weight: 850;
+          color: #0f172a;
+          line-height: 1.1;
         }
 
         .subInfo {
-          color: #64748b;
-          margin-top: 6px;
+          color: #334155;
+          margin-top: 10px;
+          font-size: 19px;
+          font-weight: 700;
         }
 
         .urgency {
+          background: #e2e8f0;
+          color: #0f172a;
+          padding: 12px 20px;
+          border-radius: 999px;
+          font-weight: 850;
+          font-size: 16px;
+          text-transform: lowercase;
+        }
+
+        .urgencyHigh {
           background: #fee2e2;
           color: #dc2626;
-          padding: 10px 16px;
-          border-radius: 999px;
-          font-weight: bold;
         }
 
         .grid {
           display: grid;
-          grid-template-columns:
-            repeat(
-              auto-fit,
-              minmax(240px, 1fr)
-            );
-          gap: 20px;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 22px;
         }
 
         .infoBlock {
           background: #f8fafc;
-          border-radius: 20px;
-          padding: 20px;
+          border-radius: 24px;
+          padding: 24px;
+          border: 1px solid #dbe3ee;
         }
 
         .infoTitle {
-          font-size: 13px;
+          font-size: 14px;
           text-transform: uppercase;
-          color: #64748b;
-          font-weight: bold;
-          margin-bottom: 10px;
+          color: #334155;
+          font-weight: 850;
+          margin-bottom: 14px;
+          letter-spacing: 1px;
         }
 
         .infoValue {
-          font-size: 18px;
-          font-weight: bold;
+          font-size: 25px;
+          font-weight: 750;
           color: #0f172a;
+          line-height: 1.5;
         }
 
         .messageBox {
-          background: #eff6ff;
-          border-radius: 22px;
-          padding: 24px;
-          margin-top: 24px;
+          background: linear-gradient(135deg, #eff6ff, #dbeafe);
+          border-radius: 26px;
+          padding: 28px;
+          margin-top: 28px;
+          border: 1px solid #bfdbfe;
         }
 
         .messageTitle {
-          font-weight: bold;
-          margin-bottom: 12px;
+          font-weight: 850;
+          margin-bottom: 16px;
           color: #145cff;
+          font-size: 22px;
         }
 
         .messageText {
           white-space: pre-wrap;
-          line-height: 1.6;
+          line-height: 1.8;
+          font-size: 20px;
+          color: #0f172a;
+          font-weight: 550;
         }
 
         .actions {
           display: grid;
-          grid-template-columns:
-            repeat(
-              auto-fit,
-              minmax(180px, 1fr)
-            );
-          gap: 16px;
-          margin-top: 26px;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 18px;
+          margin-top: 30px;
         }
 
         .callButton,
@@ -608,17 +499,25 @@ Freundliche Grüße`;
         .mailButton,
         .doneButton {
           border: none;
-          border-radius: 18px;
-          padding: 18px;
-          font-size: 16px;
-          font-weight: bold;
+          border-radius: 22px;
+          padding: 22px;
+          font-size: 20px;
+          font-weight: 850;
           cursor: pointer;
           text-decoration: none;
           text-align: center;
+          transition: 0.2s ease;
+        }
+
+        .callButton:hover,
+        .whatsappButton:hover,
+        .mailButton:hover,
+        .doneButton:hover {
+          transform: translateY(-2px);
         }
 
         .callButton {
-          background: #111827;
+          background: #0f172a;
           color: white;
         }
 
@@ -640,9 +539,13 @@ Freundliche Grüße`;
         .messageCard,
         .errorCard {
           background: white;
-          padding: 24px;
-          border-radius: 20px;
-          margin-bottom: 20px;
+          padding: 28px;
+          border-radius: 26px;
+          margin-bottom: 24px;
+          font-size: 20px;
+          font-weight: 800;
+          border: 1px solid #dbe3ee;
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
         }
 
         .errorCard {
@@ -651,8 +554,8 @@ Freundliche Grüße`;
         }
 
         @media (max-width: 768px) {
-          h1 {
-            font-size: 38px;
+          .hero {
+            padding: 34px 18px 110px;
           }
 
           .heroContent {
@@ -660,14 +563,56 @@ Freundliche Grüße`;
             align-items: flex-start;
           }
 
+          h1 {
+            font-size: 44px;
+            letter-spacing: -1px;
+          }
+
+          p {
+            font-size: 18px;
+          }
+
           .newButton {
             width: 100%;
             text-align: center;
           }
 
+          .content {
+            margin-top: -70px;
+            padding: 0 14px 50px;
+          }
+
+          .leadCard {
+            padding: 24px;
+            border-radius: 28px;
+          }
+
           .leadHeader {
             flex-direction: column;
             align-items: flex-start;
+          }
+
+          .leadInfo h2 {
+            font-size: 34px;
+          }
+
+          .subInfo {
+            font-size: 17px;
+          }
+
+          .infoValue {
+            font-size: 22px;
+          }
+
+          .messageText {
+            font-size: 18px;
+          }
+
+          .callButton,
+          .whatsappButton,
+          .mailButton,
+          .doneButton {
+            font-size: 18px;
           }
         }
       `}</style>
@@ -686,37 +631,18 @@ function StatCard({
 }) {
   return (
     <div className="statCard">
-      <div className="statIcon">
-        {icon}
-      </div>
-
-      <div className="statTitle">
-        {title}
-      </div>
-
-      <div className="statValue">
-        {value}
-      </div>
+      <div className="statIcon">{icon}</div>
+      <div className="statTitle">{title}</div>
+      <div className="statValue">{value}</div>
     </div>
   );
 }
 
-function InfoBlock({
-  title,
-  value,
-}: {
-  title: string;
-  value: string;
-}) {
+function InfoBlock({ title, value }: { title: string; value: string }) {
   return (
     <div className="infoBlock">
-      <div className="infoTitle">
-        {title}
-      </div>
-
-      <div className="infoValue">
-        {value}
-      </div>
+      <div className="infoTitle">{title}</div>
+      <div className="infoValue">{value}</div>
     </div>
   );
 }
