@@ -9,8 +9,9 @@ const supabase = createClient(
 );
 
 // ========================================
-// GET -> Webhook Verifizierung
+// WEBHOOK VERIFY
 // ========================================
+
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
 
@@ -18,29 +19,32 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  console.log("GET Webhook Verify:", {
+  console.log("VERIFY REQUEST:", {
     mode,
     token,
     challenge,
   });
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("Webhook verified");
+    console.log("WEBHOOK VERIFIED");
     return new NextResponse(challenge, { status: 200 });
   }
 
-  return new NextResponse("Verification failed", { status: 403 });
+  return new NextResponse("Verification failed", {
+    status: 403,
+  });
 }
 
 // ========================================
-// POST -> Eingehende WhatsApp Nachrichten
+// WHATSAPP MESSAGES
 // ========================================
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
     console.log(
-      "Incoming WhatsApp:",
+      "INCOMING WHATSAPP:",
       JSON.stringify(body, null, 2)
     );
 
@@ -48,106 +52,114 @@ export async function POST(req: NextRequest) {
       body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
     if (!message) {
-      console.log("Keine Nachricht gefunden");
+      console.log("NO MESSAGE FOUND");
+
       return NextResponse.json({
         success: true,
         message: "No message",
       });
     }
 
-    const phone =
-      message.from || "Unbekannt";
+    const phone = message.from || "Unbekannt";
 
-    const text =
-      message.text?.body || "";
+    const text = message.text?.body || "";
 
-    console.log("Neue Nachricht:", {
+    console.log("NEW MESSAGE:", {
       phone,
       text,
     });
 
     // ========================================
-    // KI Gewerk-Erkennung
+    // GEWERK ERKENNUNG
     // ========================================
 
-    let gewerk = "Unklar";
+    let trade = "Unklar";
 
     const lower = text.toLowerCase();
 
     if (
       lower.includes("strom") ||
       lower.includes("licht") ||
-      lower.includes("steckdose")
+      lower.includes("steckdose") ||
+      lower.includes("sicherung")
     ) {
-      gewerk = "Elektriker";
+      trade = "Elektriker";
     }
 
     if (
       lower.includes("wasser") ||
       lower.includes("heizung") ||
-      lower.includes("rohr")
+      lower.includes("rohr") ||
+      lower.includes("bad")
     ) {
-      gewerk = "Sanitär";
+      trade = "Sanitär";
     }
 
     if (
       lower.includes("dach") ||
       lower.includes("ziegel")
     ) {
-      gewerk = "Dachdecker";
+      trade = "Dachdecker";
     }
 
     if (
       lower.includes("tür") ||
-      lower.includes("fenster")
+      lower.includes("fenster") ||
+      lower.includes("holz")
     ) {
-      gewerk = "Schreiner";
+      trade = "Schreiner";
     }
 
     // ========================================
-    // In Supabase speichern
+    // SUPABASE INSERT
     // ========================================
 
-    const { error } = await supabase
-      .from("requests")
+    const { data, error } = await supabase
+      .from("leads")
       .insert([
         {
           customer_name: "WhatsApp Kunde",
-          phone,
+          phone: phone,
           email: "",
           description: text,
-          trade: gewerk,
+          trade: trade,
           urgency: "hoch",
           status: "neu",
         },
-      ]);
+      ])
+      .select();
 
     if (error) {
-      console.error("Supabase Fehler:", error);
+      console.error("SUPABASE ERROR:", error);
 
       return NextResponse.json(
         {
           success: false,
-          error,
+          error: error.message,
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
-    console.log("Erfolgreich gespeichert");
+    console.log("SUCCESSFULLY SAVED:", data);
 
     return NextResponse.json({
       success: true,
+      data,
     });
   } catch (err) {
-    console.error("POST Fehler:", err);
+    console.error("POST ERROR:", err);
 
     return NextResponse.json(
       {
         success: false,
         error: "Server Error",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
