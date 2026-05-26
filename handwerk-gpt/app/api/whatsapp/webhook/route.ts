@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const VERIFY_TOKEN = "mein_verify_token";
+const VERIFY_TOKEN = "EAAVUKOZC3BYUBRdyZBTs0FtshNOasEZCDGdg5rV5tZANk24YjMja0ojjWLZCvozpXc550lvJrn26JD91PsTZBBmkyFXqwZBTSEO4MPDLlXqpsyUCP0p6BNAkgeobq8ryznuWOF81T6UhrVGcMtG26jyx5KIyqy66ZAfDPZBJwhi9HPX6fMkjoYbwGWemMXIyQeV0VNSecFnZAZBnU5efkCCxcZBGas2G8OTHZCBMZBNj2kZCnHrOEJnFEZCRYz9xoC9sCFr4ZAZAIsAcBPbUAAZAlTSDcG0VLYLl8zm98wy8JfaZBRRu4wZDZD";
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
