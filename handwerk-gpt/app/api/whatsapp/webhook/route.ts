@@ -19,15 +19,10 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  console.log("VERIFY REQUEST:", {
-    mode,
-    token,
-    challenge,
-  });
-
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("WEBHOOK VERIFIED");
-    return new NextResponse(challenge, { status: 200 });
+    return new NextResponse(challenge, {
+      status: 200,
+    });
   }
 
   return new NextResponse("Verification failed", {
@@ -36,7 +31,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ========================================
-// WHATSAPP MESSAGES
+// WHATSAPP WEBHOOK
 // ========================================
 
 export async function POST(req: NextRequest) {
@@ -52,22 +47,14 @@ export async function POST(req: NextRequest) {
       body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
     if (!message) {
-      console.log("NO MESSAGE FOUND");
-
       return NextResponse.json({
         success: true,
-        message: "No message",
+        message: "No message found",
       });
     }
 
-    const phone = message.from || "Unbekannt";
-
+    const phone = message.from || "";
     const text = message.text?.body || "";
-
-    console.log("NEW MESSAGE:", {
-      phone,
-      text,
-    });
 
     // ========================================
     // GEWERK ERKENNUNG
@@ -80,8 +67,8 @@ export async function POST(req: NextRequest) {
     if (
       lower.includes("strom") ||
       lower.includes("licht") ||
-      lower.includes("steckdose") ||
-      lower.includes("sicherung")
+      lower.includes("sicherung") ||
+      lower.includes("steckdose")
     ) {
       trade = "Elektriker";
     }
@@ -89,23 +76,20 @@ export async function POST(req: NextRequest) {
     if (
       lower.includes("wasser") ||
       lower.includes("heizung") ||
-      lower.includes("rohr") ||
       lower.includes("bad")
     ) {
-      trade = "Sanitär";
+      trade = "Heizung";
     }
 
     if (
-      lower.includes("dach") ||
-      lower.includes("ziegel")
+      lower.includes("dach")
     ) {
       trade = "Dachdecker";
     }
 
     if (
       lower.includes("tür") ||
-      lower.includes("fenster") ||
-      lower.includes("holz")
+      lower.includes("fenster")
     ) {
       trade = "Schreiner";
     }
@@ -121,10 +105,11 @@ export async function POST(req: NextRequest) {
           customer_name: "WhatsApp Kunde",
           phone: phone,
           email: "",
-          description: text,
+          city: "",
+          raw_message: text,
           trade: trade,
+          summary: text,
           urgency: "hoch",
-          status: "neu",
         },
       ])
       .select();
@@ -143,7 +128,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("SUCCESSFULLY SAVED:", data);
+    console.log("SUCCESS:", data);
 
     return NextResponse.json({
       success: true,
