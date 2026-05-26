@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-const VERIFY_TOKEN = "EAAVUKOZC3BYUBRdyZBTs0FtshNOasEZCDGdg5rV5tZANk24YjMja0ojjWLZCvozpXc550lvJrn26JD91PsTZBBmkyFXqwZBTSEO4MPDLlXqpsyUCP0p6BNAkgeobq8ryznuWOF81T6UhrVGcMtG26jyx5KIyqy66ZAfDPZBJwhi9HPX6fMkjoYbwGWemMXIyQeV0VNSecFnZAZBnU5efkCCxcZBGas2G8OTHZCBMZBNj2kZCnHrOEJnFEZCRYz9xoC9sCFr4ZAZAIsAcBPbUAAZAlTSDcG0VLYLl8zm98wy8JfaZBRRu4wZDZD";
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+// ========================================
+// GET -> Webhook Verifizierung
+// ========================================
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
 
@@ -9,100 +18,136 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  console.log("WHATSAPP GET VERIFIZIERUNG");
-  console.log("mode:", mode);
-  console.log("token:", token);
-  console.log("challenge:", challenge);
+  console.log("GET Webhook Verify:", {
+    mode,
+    token,
+    challenge,
+  });
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("WEBHOOK VERIFIZIERUNG ERFOLGREICH");
-    return new Response(challenge || "", {
-      status: 200,
-    });
+    console.log("Webhook verified");
+    return new NextResponse(challenge, { status: 200 });
   }
 
-  console.log("WEBHOOK VERIFIZIERUNG FEHLGESCHLAGEN");
-
-  return new Response("Forbidden", {
-    status: 403,
-  });
+  return new NextResponse("Verification failed", { status: 403 });
 }
 
+// ========================================
+// POST -> Eingehende WhatsApp Nachrichten
+// ========================================
 export async function POST(req: NextRequest) {
-  console.log("=================================");
-  console.log("WHATSAPP POST ANGEKOMMEN");
-  console.log("=================================");
-
   try {
     const body = await req.json();
 
-    console.log("ROHER WHATSAPP BODY:");
-    console.log(JSON.stringify(body, null, 2));
+    console.log(
+      "Incoming WhatsApp:",
+      JSON.stringify(body, null, 2)
+    );
 
-    const value = body?.entry?.[0]?.changes?.[0]?.value;
-    const message = value?.messages?.[0];
-    const contact = value?.contacts?.[0];
+    const message =
+      body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
     if (!message) {
-      console.log("KEINE MESSAGE IM WEBHOOK GEFUNDEN");
+      console.log("Keine Nachricht gefunden");
       return NextResponse.json({
         success: true,
-        message: "Kein messages-Objekt vorhanden",
+        message: "No message",
       });
     }
 
-    const from = message.from || "";
-    const text = message.text?.body || "";
-    const name = contact?.profile?.name || from;
+    const phone =
+      message.from || "Unbekannt";
 
-    console.log("NEUE WHATSAPP NACHRICHT");
-    console.log("Name:", name);
-    console.log("Von:", from);
-    console.log("Text:", text);
+    const text =
+      message.text?.body || "";
 
-    const newLead = {
-      id: Date.now(),
-      created_at: new Date().toISOString(),
-      customer_name: name,
-      phone: from,
-      email: "",
-      city: "",
-      raw_message: text,
-      trade: "WhatsApp Anfrage",
-      summary: text || "Neue WhatsApp Anfrage",
-      urgency: "normal",
-      site_visit_needed: false,
-      missing_info: ["E-Mail-Adresse", "Ort / Adresse"],
-      suggested_reply: `Hallo ${name},
+    console.log("Neue Nachricht:", {
+      phone,
+      text,
+    });
 
-vielen Dank für Ihre Anfrage.
+    // ========================================
+    // KI Gewerk-Erkennung
+    // ========================================
 
-Wir haben Ihre Nachricht erhalten und melden uns schnellstmöglich zurück.
+    let gewerk = "Unklar";
 
-Freundliche Grüße`,
-      status: "neu",
-    };
+    const lower = text.toLowerCase();
 
-    console.log("ERSTELLTER LEAD:");
-    console.log(JSON.stringify(newLead, null, 2));
+    if (
+      lower.includes("strom") ||
+      lower.includes("licht") ||
+      lower.includes("steckdose")
+    ) {
+      gewerk = "Elektriker";
+    }
+
+    if (
+      lower.includes("wasser") ||
+      lower.includes("heizung") ||
+      lower.includes("rohr")
+    ) {
+      gewerk = "Sanitär";
+    }
+
+    if (
+      lower.includes("dach") ||
+      lower.includes("ziegel")
+    ) {
+      gewerk = "Dachdecker";
+    }
+
+    if (
+      lower.includes("tür") ||
+      lower.includes("fenster")
+    ) {
+      gewerk = "Schreiner";
+    }
+
+    // ========================================
+    // In Supabase speichern
+    // ========================================
+
+    const { error } = await supabase
+      .from("requests")
+      .insert([
+        {
+          customer_name: "WhatsApp Kunde",
+          phone,
+          email: "",
+          description: text,
+          trade: gewerk,
+          urgency: "hoch",
+          status: "neu",
+        },
+      ]);
+
+    if (error) {
+      console.error("Supabase Fehler:", error);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error,
+        },
+        { status: 500 }
+      );
+    }
+
+    console.log("Erfolgreich gespeichert");
 
     return NextResponse.json({
       success: true,
-      received: true,
-      lead: newLead,
     });
-  } catch (error) {
-    console.error("WHATSAPP WEBHOOK FEHLER:");
-    console.error(error);
+  } catch (err) {
+    console.error("POST Fehler:", err);
 
     return NextResponse.json(
       {
         success: false,
-        error: "Webhook Fehler",
+        error: "Server Error",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
