@@ -1,47 +1,41 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-export async function GET(
-  req: Request,
-  context: { params: Promise<{ id: string }> }
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await context.params;
+    const body = await request.json();
 
-    if (!id) {
-      return NextResponse.json(
-        { error: "ID fehlt" },
-        { status: 400 }
-      );
-    }
-
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("leads")
-      .select("*")
-      .eq("id", Number(id))
-      .single();
+      .update({
+        status: body.status,
+      })
+      .eq("id", params.id);
 
     if (error) {
+      console.error(error);
+
       return NextResponse.json(
         { error: error.message },
         { status: 500 }
       );
     }
 
-    if (!data) {
-      return NextResponse.json(
-        { error: "Lead nicht gefunden" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json(data);
-  } catch (error: any) {
+    return NextResponse.json({
+      success: true,
+    });
+  } catch (err: any) {
     return NextResponse.json(
-      { error: error.message || "Serverfehler" },
+      { error: err.message },
       { status: 500 }
     );
   }
 }
-
