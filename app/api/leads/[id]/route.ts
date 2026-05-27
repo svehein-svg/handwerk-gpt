@@ -13,28 +13,38 @@ export async function PATCH(
   try {
     const body = await request.json();
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("leads")
       .update({
         status: body.status,
       })
-      .eq("id", params.id);
+      .eq("id", params.id)
+      .select();
 
     if (error) {
-      console.error(error);
+      console.error("SUPABASE ERROR:", error);
 
       return NextResponse.json(
-        { error: error.message },
+        {
+          success: false,
+          error: error.message,
+        },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
+      data,
     });
   } catch (err: any) {
+    console.error("PATCH ERROR:", err);
+
     return NextResponse.json(
-      { error: err.message },
+      {
+        success: false,
+        error: err.message,
+      },
       { status: 500 }
     );
   }
