@@ -1,51 +1,26 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+async function markAsDone(id: number) {
   try {
-    const body = await request.json();
+    const res = await fetch(`/api/leads/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        status: "erledigt",
+      }),
+    });
 
-    const { data, error } = await supabase
-      .from("leads")
-      .update({
-        status: body.status,
-      })
-      .eq("id", params.id)
-      .select();
+    const data = await res.json();
 
-    if (error) {
-      console.error("SUPABASE ERROR:", error);
+    console.log("PATCH Antwort:", data);
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: error.message,
-        },
-        { status: 500 }
-      );
+    if (!res.ok) {
+      alert("Fehler beim Speichern: " + JSON.stringify(data));
+      return;
     }
 
-    return NextResponse.json({
-      success: true,
-      data,
-    });
+    setLeads((prev) => prev.filter((lead) => lead.id !== id));
   } catch (err: any) {
-    console.error("PATCH ERROR:", err);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: err.message,
-      },
-      { status: 500 }
-    );
+    alert("Fehler: " + err.message);
   }
 }
