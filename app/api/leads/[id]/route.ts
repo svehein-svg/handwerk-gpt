@@ -10,9 +10,25 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const { data, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("id", params.id)
+    .single();
+
+  if (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error.message,
+      },
+      { status: 500 }
+    );
+  }
+
   return NextResponse.json({
-    routeWorks: true,
-    id: params.id,
+    ok: true,
+    lead: data,
   });
 }
 
@@ -26,10 +42,11 @@ export async function PATCH(
     const { data, error } = await supabase
       .from("leads")
       .update({
-        status: "erledigt",
+        status: body.status || "erledigt",
       })
       .eq("id", params.id)
-      .select();
+      .select()
+      .single();
 
     if (error) {
       return NextResponse.json(
@@ -43,13 +60,13 @@ export async function PATCH(
 
     return NextResponse.json({
       ok: true,
-      updated: data,
+      lead: data,
     });
   } catch (err: any) {
     return NextResponse.json(
       {
         ok: false,
-        error: err.message,
+        error: err.message || "Fehler beim Aktualisieren.",
       },
       { status: 500 }
     );

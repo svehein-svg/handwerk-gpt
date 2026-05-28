@@ -31,10 +31,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    console.log(
-      "WhatsApp Webhook POST:",
-      JSON.stringify(body, null, 2)
-    );
+    console.log("WhatsApp Webhook POST:", JSON.stringify(body, null, 2));
 
     const entry = body?.entry?.[0];
     const change = entry?.changes?.[0];
@@ -53,9 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const from = message.from || "";
-
-    const customerName =
-      contact?.profile?.name || "WhatsApp Kunde";
+    const customerName = contact?.profile?.name || "WhatsApp Kunde";
 
     const text =
       message?.text?.body ||
@@ -76,10 +71,13 @@ export async function POST(req: NextRequest) {
       email: "",
       city: "",
       raw_message: text,
-      summary: text,
+      summary: text || "Neue WhatsApp Anfrage",
       trade: "Unklar",
       urgency: "hoch",
-      site_visit: false,
+      site_visit_needed: false,
+      missing_info: ["E-Mail-Adresse", "Ort / Adresse"],
+      suggested_reply: "",
+      status: "neu",
     };
 
     console.log("Speichere Lead:", leadData);
@@ -87,7 +85,8 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from("leads")
       .insert([leadData])
-      .select();
+      .select()
+      .single();
 
     if (error) {
       console.error("Supabase Insert Fehler:", error);
@@ -105,15 +104,15 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      lead: data?.[0] || null,
+      lead: data,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Webhook Fehler:", error);
 
     return NextResponse.json(
       {
         ok: false,
-        error: "Webhook error",
+        error: error.message || "Webhook error",
       },
       { status: 500 }
     );
