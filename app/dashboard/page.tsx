@@ -22,17 +22,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadLeads();
-
     const interval = setInterval(loadLeads, 5000);
     return () => clearInterval(interval);
   }, []);
 
   async function loadLeads() {
     try {
-      const res = await fetch("/api/leads", {
-        cache: "no-store",
-      });
-
+      const res = await fetch("/api/leads", { cache: "no-store" });
       const data = await res.json();
       setLeads(Array.isArray(data) ? data : []);
     } catch (err) {

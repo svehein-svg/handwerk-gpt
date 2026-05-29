@@ -16,10 +16,7 @@ export async function GET() {
     console.error("GET /api/leads Fehler:", error);
 
     return NextResponse.json(
-      {
-        ok: false,
-        error: error.message,
-      },
+      { ok: false, error: error.message },
       { status: 500 }
     );
   }
@@ -34,10 +31,7 @@ export async function PATCH(req: Request) {
 
     if (!id || !status) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "ID und Status erforderlich.",
-        },
+        { ok: false, error: "ID und Status erforderlich." },
         { status: 400 }
       );
     }
@@ -53,10 +47,7 @@ export async function PATCH(req: Request) {
       console.error("PATCH /api/leads Fehler:", error);
 
       return NextResponse.json(
-        {
-          ok: false,
-          error: error.message,
-        },
+        { ok: false, error: error.message },
         { status: 500 }
       );
     }
@@ -69,10 +60,7 @@ export async function PATCH(req: Request) {
     console.error("PATCH /api/leads Exception:", err);
 
     return NextResponse.json(
-      {
-        ok: false,
-        error: err.message || "Fehler beim Aktualisieren.",
-      },
+      { ok: false, error: err.message || "Fehler beim Aktualisieren." },
       { status: 500 }
     );
   }
