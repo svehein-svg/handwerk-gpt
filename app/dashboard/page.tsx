@@ -23,10 +23,7 @@ export default function DashboardPage() {
   useEffect(() => {
     loadLeads();
 
-    const interval = setInterval(() => {
-      loadLeads();
-    }, 5000);
-
+    const interval = setInterval(loadLeads, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -47,7 +44,7 @@ export default function DashboardPage() {
 
   async function markAsDone(id: number) {
     try {
-      const res = await fetch(`/api/leads/${id}`, {
+      const res = await fetch("/api/leads", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -59,7 +56,6 @@ export default function DashboardPage() {
       });
 
       const data = await res.json();
-
       console.log("PATCH RESULT:", data);
 
       if (!res.ok) {
@@ -119,7 +115,6 @@ export default function DashboardPage() {
             <div className="topRow">
               <div>
                 <h2>{lead.customer_name || "Unbekannter Kunde"}</h2>
-
                 <div className="small">📞 {lead.phone || "-"}</div>
                 <div className="small">📍 {lead.city || "Kein Ort"}</div>
               </div>
@@ -143,10 +138,7 @@ export default function DashboardPage() {
                 </a>
               )}
 
-              <button
-                onClick={() => markAsDone(lead.id)}
-                className="done"
-              >
+              <button onClick={() => markAsDone(lead.id)} className="done">
                 Erledigt
               </button>
             </div>
