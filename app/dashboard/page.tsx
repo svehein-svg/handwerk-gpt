@@ -37,10 +37,9 @@ export default function DashboardPage() {
       });
 
       const data = await res.json();
-
       setLeads(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error(err);
+      console.error("Fehler beim Laden:", err);
     } finally {
       setLoading(false);
     }
@@ -48,7 +47,7 @@ export default function DashboardPage() {
 
   async function markAsDone(id: number) {
     try {
-      const res = await fetch("/api/leads", {
+      const res = await fetch(`/api/leads/${id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -63,19 +62,20 @@ export default function DashboardPage() {
 
       console.log("PATCH RESULT:", data);
 
+      if (!res.ok) {
+        alert(data.error || "Fehler beim Aktualisieren.");
+        return;
+      }
+
       await loadLeads();
     } catch (err) {
-      console.error(err);
+      console.error("Fehler beim Aktualisieren:", err);
+      alert("Fehler beim Aktualisieren.");
     }
   }
 
-  const activeLeads = leads.filter(
-    (lead) => lead.status !== "erledigt"
-  );
-
-  const doneLeads = leads.filter(
-    (lead) => lead.status === "erledigt"
-  );
+  const activeLeads = leads.filter((lead) => lead.status !== "erledigt");
+  const doneLeads = leads.filter((lead) => lead.status === "erledigt");
 
   return (
     <main className="page">
@@ -107,16 +107,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {loading && (
-        <div className="empty">
-          Lade Daten...
-        </div>
-      )}
+      {loading && <div className="empty">Lade Daten...</div>}
 
       {!loading && activeLeads.length === 0 && (
-        <div className="empty">
-          Keine offenen Leads vorhanden.
-        </div>
+        <div className="empty">Keine offenen Leads vorhanden.</div>
       )}
 
       <div className="leadList">
@@ -124,32 +118,18 @@ export default function DashboardPage() {
           <div className="leadCard" key={lead.id}>
             <div className="topRow">
               <div>
-                <h2>
-                  {lead.customer_name || "Unbekannter Kunde"}
-                </h2>
+                <h2>{lead.customer_name || "Unbekannter Kunde"}</h2>
 
-                <div className="small">
-                  📞 {lead.phone || "-"}
-                </div>
-
-                <div className="small">
-                  📍 {lead.city || "Kein Ort"}
-                </div>
+                <div className="small">📞 {lead.phone || "-"}</div>
+                <div className="small">📍 {lead.city || "Kein Ort"}</div>
               </div>
 
-              <div className="urgency">
-                {lead.urgency || "normal"}
-              </div>
+              <div className="urgency">{lead.urgency || "normal"}</div>
             </div>
 
             <div className="box">
-              <div className="title">
-                Nachricht
-              </div>
-
-              <div>
-                {lead.summary || lead.raw_message || "-"}
-              </div>
+              <div className="title">Nachricht</div>
+              <div>{lead.summary || lead.raw_message || "-"}</div>
             </div>
 
             <div className="actions">
