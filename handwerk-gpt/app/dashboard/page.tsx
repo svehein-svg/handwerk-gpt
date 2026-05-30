@@ -14,6 +14,8 @@ type Lead = {
   summary: string | null;
   urgency: string | null;
   status: string | null;
+  suggested_reply: string | null;
+  missing_info?: string[] | null;
 };
 
 export default function DashboardPage() {
@@ -106,7 +108,15 @@ export default function DashboardPage() {
           <div>
             <div>🧾</div>
             <span>Heute</span>
-            <strong>0</strong>
+            <strong>
+              {
+                leads.filter((lead) => {
+                  const today = new Date().toDateString();
+                  const created = new Date(lead.created_at).toDateString();
+                  return today === created;
+                }).length
+              }
+            </strong>
           </div>
         </div>
       </section>
@@ -131,7 +141,17 @@ export default function DashboardPage() {
                   <p>📍 {lead.city || "Kein Ort"}</p>
                 </div>
 
-                <div className="urgency">{lead.urgency || "normal"}</div>
+                <div
+                  className={
+                    lead.urgency === "hoch"
+                      ? "urgency high"
+                      : lead.urgency === "mittel"
+                      ? "urgency medium"
+                      : "urgency low"
+                  }
+                >
+                  {lead.urgency || "normal"}
+                </div>
               </div>
 
               <div className="infoGrid">
@@ -151,26 +171,32 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {lead.raw_message && (
+                <div className="messageBox">
+                  <span>Originalanfrage</span>
+                  <p>{lead.raw_message}</p>
+                </div>
+              )}
+
               <div className="answerBox">
                 <h3>KI Antwortvorschlag</h3>
 
-                <p>Hallo {lead.customer_name || "Kunde"},</p>
-
-                <p>vielen Dank für Ihre Anfrage.</p>
-
                 <p>
-                  Damit wir Ihre Anfrage schneller bearbeiten können, benötigen
-                  wir noch folgende Informationen:
+                  {lead.suggested_reply ||
+                    "Noch kein KI-Antwortvorschlag vorhanden."}
                 </p>
 
-                <ul>
-                  {!lead.email && <li>E-Mail-Adresse</li>}
-                  {!lead.city && <li>Ort / Adresse</li>}
-                </ul>
-
-                <p>Vielen Dank.</p>
-
-                <p>Freundliche Grüße</p>
+                {Array.isArray(lead.missing_info) &&
+                  lead.missing_info.length > 0 && (
+                    <div className="missingBox">
+                      <strong>Fehlende Informationen:</strong>
+                      <ul>
+                        {lead.missing_info.map((item, index) => (
+                          <li key={index}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
               </div>
 
               <div className="actions">
@@ -184,6 +210,7 @@ export default function DashboardPage() {
                   <a
                     href={`https://wa.me/${lead.phone}`}
                     target="_blank"
+                    rel="noreferrer"
                     className="whatsapp"
                   >
                     💬 WhatsApp senden
@@ -331,11 +358,24 @@ export default function DashboardPage() {
         }
 
         .urgency {
-          background: #fee2e2;
-          color: #dc2626;
           padding: 14px 20px;
           border-radius: 999px;
           font-weight: 900;
+        }
+
+        .urgency.high {
+          background: #fee2e2;
+          color: #dc2626;
+        }
+
+        .urgency.medium {
+          background: #fef3c7;
+          color: #b45309;
+        }
+
+        .urgency.low {
+          background: #dcfce7;
+          color: #15803d;
         }
 
         .infoGrid {
@@ -345,15 +385,32 @@ export default function DashboardPage() {
           margin-bottom: 28px;
         }
 
-        .infoGrid span {
+        .infoGrid span,
+        .messageBox span {
           display: block;
           font-size: 14px;
           margin-bottom: 6px;
+          color: #64748b;
+          font-weight: 800;
         }
 
         .infoGrid strong {
           font-size: 16px;
           font-weight: 500;
+        }
+
+        .messageBox {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 20px;
+          padding: 20px;
+          margin-bottom: 24px;
+        }
+
+        .messageBox p {
+          margin: 0;
+          line-height: 1.55;
+          font-size: 16px;
         }
 
         .answerBox {
@@ -365,12 +422,30 @@ export default function DashboardPage() {
           font-size: 18px;
           line-height: 1.65;
           font-weight: 700;
+          white-space: pre-wrap;
         }
 
         .answerBox h3 {
           color: #155dfc;
           margin-top: 0;
           font-size: 24px;
+        }
+
+        .answerBox p {
+          margin-bottom: 0;
+        }
+
+        .missingBox {
+          background: white;
+          border-radius: 16px;
+          padding: 16px 18px;
+          margin-top: 22px;
+          font-size: 16px;
+          white-space: normal;
+        }
+
+        .missingBox ul {
+          margin: 8px 0 0;
         }
 
         .actions {
