@@ -44,17 +44,11 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/leads", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id,
-          status: "erledigt",
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: "erledigt" }),
       });
 
       const data = await res.json();
-      console.log("PATCH RESULT:", data);
 
       if (!res.ok) {
         alert(data.error || "Fehler beim Aktualisieren.");
@@ -66,6 +60,36 @@ export default function DashboardPage() {
       console.error("Fehler beim Aktualisieren:", err);
       alert("Fehler beim Aktualisieren.");
     }
+  }
+
+  function getReplyText(lead: Lead) {
+    return (
+      lead.suggested_reply ||
+      `Hallo ${lead.customer_name || ""},
+
+vielen Dank für Ihre Anfrage.
+
+Wir prüfen Ihr Anliegen und melden uns zeitnah bei Ihnen.
+
+Freundliche Grüße`
+    );
+  }
+
+  function getWhatsappLink(lead: Lead) {
+    const phone = (lead.phone || "").replace(/\D/g, "");
+    const text = encodeURIComponent(getReplyText(lead));
+    return `https://wa.me/${phone}?text=${text}`;
+  }
+
+  function getMailLink(lead: Lead) {
+    const subject = encodeURIComponent("Ihre Anfrage");
+    const body = encodeURIComponent(getReplyText(lead));
+    return `mailto:${lead.email}?subject=${subject}&body=${body}`;
+  }
+
+  async function copyReply(lead: Lead) {
+    await navigator.clipboard.writeText(getReplyText(lead));
+    alert("KI-Antwort wurde kopiert.");
   }
 
   const activeLeads = leads.filter((lead) => lead.status !== "erledigt");
@@ -180,11 +204,7 @@ export default function DashboardPage() {
 
               <div className="answerBox">
                 <h3>KI Antwortvorschlag</h3>
-
-                <p>
-                  {lead.suggested_reply ||
-                    "Noch kein KI-Antwortvorschlag vorhanden."}
-                </p>
+                <p>{getReplyText(lead)}</p>
 
                 {Array.isArray(lead.missing_info) &&
                   lead.missing_info.length > 0 && (
@@ -208,7 +228,7 @@ export default function DashboardPage() {
 
                 {lead.phone && (
                   <a
-                    href={`https://wa.me/${lead.phone}`}
+                    href={getWhatsappLink(lead)}
                     target="_blank"
                     rel="noreferrer"
                     className="whatsapp"
@@ -218,10 +238,14 @@ export default function DashboardPage() {
                 )}
 
                 {lead.email && (
-                  <a href={`mailto:${lead.email}`} className="email">
+                  <a href={getMailLink(lead)} className="email">
                     ✉️ E-Mail senden
                   </a>
                 )}
+
+                <button onClick={() => copyReply(lead)} className="copy">
+                  📋 Antwort kopieren
+                </button>
 
                 <button onClick={() => markAsDone(lead.id)} className="done">
                   ✅ Erledigt
@@ -431,10 +455,6 @@ export default function DashboardPage() {
           font-size: 24px;
         }
 
-        .answerBox p {
-          margin-bottom: 0;
-        }
-
         .missingBox {
           background: white;
           border-radius: 16px;
@@ -444,13 +464,9 @@ export default function DashboardPage() {
           white-space: normal;
         }
 
-        .missingBox ul {
-          margin: 8px 0 0;
-        }
-
         .actions {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(5, 1fr);
           gap: 16px;
         }
 
@@ -478,6 +494,11 @@ export default function DashboardPage() {
 
         .email {
           background: #155dfc;
+          color: white;
+        }
+
+        .copy {
+          background: #f59e0b;
           color: white;
         }
 
