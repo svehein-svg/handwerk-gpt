@@ -11,22 +11,34 @@ export async function POST(req: Request) {
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0,
+      temperature: 0.4,
       messages: [
         {
           role: "system",
           content: `
-Du bist ein Assistent für Handwerksbetriebe in Deutschland.
+Du bist ein erfahrener KI-Assistent für Handwerksbetriebe in Deutschland.
 
-Analysiere die Anfrage und antworte ausschließlich als valides JSON.
+Deine Aufgabe:
+Analysiere Kundenanfragen intelligent und praxisnah für einen Handwerksbetrieb.
 
 Wichtig:
-- Wenn Name, Telefon, E-Mail oder Ort bereits vom Formular mitgegeben wurden,
-  dann übernimm diese Werte.
-- Wenn sie leer sind, dann lasse sie leer.
+- Antworte ausschließlich als valides JSON.
+- Nutze alle vorhandenen Informationen bestmöglich.
+- Frage nicht unnötig nach, wenn die Anfrage bereits verständlich ist.
+- Erstelle eine konkrete, hilfreiche Antwort an den Kunden.
+- Wenn Informationen fehlen, nenne sie nur in "missing_info".
+- Die "suggested_reply" soll natürlich, freundlich und professionell klingen.
 - Erfinde keine Kontaktdaten.
+- Wenn Name, Telefon, E-Mail oder Ort vom Formular mitgegeben wurden, übernimm sie.
 
-Antworte exakt in diesem Format:
+Bewerte:
+- trade = passendes Gewerk, z.B. Sanitär, Heizung, Elektro, Dachdecker, Maler, Schreiner, Gartenbau, Allgemein
+- urgency = niedrig, mittel oder hoch
+- site_visit_needed = true, wenn wahrscheinlich ein Vor-Ort-Termin nötig ist
+- summary = kurze intelligente Zusammenfassung der Anfrage
+- suggested_reply = fertige Antwort, die der Betrieb direkt an den Kunden senden könnte
+
+Antworte exakt in diesem JSON-Format:
 
 {
   "customer_name": "",
@@ -82,28 +94,29 @@ ${body.message || ""}
       );
     }
 
+    const missingInfo: string[] = Array.isArray(parsed.missing_info)
+      ? parsed.missing_info
+      : [];
+
     const finalData = {
-      customer_name: parsed.customer_name || body.customer_name || "",
-      phone: parsed.phone || body.phone || "",
-      email: parsed.email || body.email || "",
-      city: parsed.city || body.city || "",
+      customer_name: body.customer_name || parsed.customer_name || "",
+      phone: body.phone || parsed.phone || "",
+      email: body.email || parsed.email || "",
+      city: body.city || parsed.city || "",
       raw_message: body.message || "",
-      trade: parsed.trade || "",
+      trade: parsed.trade || "Allgemein",
       summary: parsed.summary || "",
-      urgency: parsed.urgency || "",
+      urgency: parsed.urgency || "mittel",
       site_visit_needed:
         typeof parsed.site_visit_needed === "boolean"
           ? parsed.site_visit_needed
-          : false,
-     missing_info: [] as string[],
-      suggested_reply: parsed.suggested_reply || "",
+          : true,
+      missing_info: missingInfo,
+      suggested_reply:
+        parsed.suggested_reply ||
+        "Vielen Dank für Ihre Anfrage. Wir prüfen Ihr Anliegen und melden uns zeitnah bei Ihnen.",
       status: parsed.status || "neu",
     };
-
-    if (!finalData.customer_name) finalData.missing_info.push("Kundenname");
-    if (!finalData.phone) finalData.missing_info.push("Telefonnummer");
-    if (!finalData.email) finalData.missing_info.push("E-Mail");
-    if (!finalData.city) finalData.missing_info.push("Stadt");
 
     const supabaseRes = await fetch(
       `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/leads`,
@@ -132,8 +145,6 @@ ${body.message || ""}
       );
     }
 
-    const saved = await supabaseRes.json();
-
     return NextResponse.json(finalData);
   } catch (err: any) {
     return NextResponse.json(
@@ -145,4 +156,3 @@ ${body.message || ""}
     );
   }
 }
-
