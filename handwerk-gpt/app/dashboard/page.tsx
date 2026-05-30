@@ -75,8 +75,22 @@ Freundliche Grüße`
     );
   }
 
+  function normalizeGermanWhatsappNumber(phone: string) {
+    let cleaned = phone.replace(/\D/g, "");
+
+    if (cleaned.startsWith("0049")) {
+      cleaned = cleaned.substring(2);
+    }
+
+    if (cleaned.startsWith("0")) {
+      cleaned = "49" + cleaned.substring(1);
+    }
+
+    return cleaned;
+  }
+
   function getWhatsappLink(lead: Lead) {
-    const phone = (lead.phone || "").replace(/\D/g, "");
+    const phone = normalizeGermanWhatsappNumber(lead.phone || "");
     const text = encodeURIComponent(getReplyText(lead));
     return `https://wa.me/${phone}?text=${text}`;
   }
