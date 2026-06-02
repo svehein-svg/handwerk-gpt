@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { MouseEvent } from "react";
 
 type LeadStatus =
   | "neu"
@@ -140,30 +139,12 @@ export default function DashboardPage() {
     return false;
   }
 
-  async function autoUpdateStatus(lead: Lead, nextStatus: LeadStatus) {
+  function autoUpdateStatus(lead: Lead, nextStatus: LeadStatus) {
     if (!shouldAutoAdvanceStatus(lead.status, nextStatus)) {
       return;
     }
 
-    await updateStatus(lead.id, nextStatus);
-  }
-
-  async function openLinkAfterStatusUpdate(
-    event: MouseEvent<HTMLAnchorElement>,
-    lead: Lead,
-    nextStatus: LeadStatus,
-    href: string,
-    openInNewTab = false
-  ) {
-    event.preventDefault();
-    await autoUpdateStatus(lead, nextStatus);
-
-    if (openInNewTab) {
-      window.open(href, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    window.location.href = href;
+    updateStatus(lead.id, nextStatus);
   }
 
   function getReplyText(lead: Lead) {
@@ -444,14 +425,7 @@ Freundliche Grüße`;
                   <a
                     href={`tel:${lead.phone}`}
                     className="call"
-                    onClick={(event) =>
-                      openLinkAfterStatusUpdate(
-                        event,
-                        lead,
-                        "kontaktiert",
-                        `tel:${lead.phone}`
-                      )
-                    }
+                    onClick={() => autoUpdateStatus(lead, "kontaktiert")}
                   >
                     📞 Anrufen
                   </a>
@@ -463,15 +437,7 @@ Freundliche Grüße`;
                     target="_blank"
                     rel="noreferrer"
                     className="whatsapp"
-                    onClick={(event) =>
-                      openLinkAfterStatusUpdate(
-                        event,
-                        lead,
-                        "kontaktiert",
-                        getWhatsappLink(lead),
-                        true
-                      )
-                    }
+                    onClick={() => autoUpdateStatus(lead, "kontaktiert")}
                   >
                     💬 WhatsApp senden
                   </a>
@@ -481,14 +447,7 @@ Freundliche Grüße`;
                   <a
                     href={getMailLink(lead)}
                     className="email"
-                    onClick={(event) =>
-                      openLinkAfterStatusUpdate(
-                        event,
-                        lead,
-                        "kontaktiert",
-                        getMailLink(lead)
-                      )
-                    }
+                    onClick={() => autoUpdateStatus(lead, "kontaktiert")}
                   >
                     ✉️ E-Mail senden
                   </a>
@@ -510,15 +469,7 @@ Freundliche Grüße`;
                     target="_blank"
                     rel="noreferrer"
                     className="appointment"
-                    onClick={(event) =>
-                      openLinkAfterStatusUpdate(
-                        event,
-                        lead,
-                        "angebot_gesendet",
-                        getAppointmentWhatsappLink(lead),
-                        true
-                      )
-                    }
+                    onClick={() => autoUpdateStatus(lead, "angebot_gesendet")}
                   >
                     📅 Termin WhatsApp
                   </a>
@@ -528,14 +479,7 @@ Freundliche Grüße`;
                   <a
                     href={getAppointmentMailLink(lead)}
                     className="appointmentMail"
-                    onClick={(event) =>
-                      openLinkAfterStatusUpdate(
-                        event,
-                        lead,
-                        "angebot_gesendet",
-                        getAppointmentMailLink(lead)
-                      )
-                    }
+                    onClick={() => autoUpdateStatus(lead, "angebot_gesendet")}
                   >
                     📅 Termin E-Mail
                   </a>
