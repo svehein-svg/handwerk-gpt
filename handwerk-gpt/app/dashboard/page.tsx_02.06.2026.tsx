@@ -2,34 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-type LeadStatus =
-  | "neu"
-  | "kontaktiert"
-  | "angebot_gesendet"
-  | "beauftragt"
-  | "erledigt";
-
-const statusOptions: { value: LeadStatus; label: string; icon: string }[] = [
-  { value: "neu", label: "Neu", icon: "🔵" },
-  { value: "kontaktiert", label: "Kontaktiert", icon: "🟡" },
-  { value: "angebot_gesendet", label: "Angebot gesendet", icon: "🟠" },
-  { value: "beauftragt", label: "Beauftragt", icon: "🟢" },
-  { value: "erledigt", label: "Erledigt", icon: "⚫" },
-];
-
-function getStatusLabel(status: string | null) {
-  const found = statusOptions.find((item) => item.value === status);
-  return found ? `${found.icon} ${found.label}` : "🔵 Neu";
-}
-
-function getStatusClass(status: string | null) {
-  if (status === "kontaktiert") return "statusBadge contacted";
-  if (status === "angebot_gesendet") return "statusBadge offer";
-  if (status === "beauftragt") return "statusBadge ordered";
-  if (status === "erledigt") return "statusBadge doneStatus";
-  return "statusBadge newStatus";
-}
-
 type Lead = {
   id: number;
   created_at: string;
@@ -87,28 +59,6 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Fehler beim Aktualisieren:", err);
       alert("Fehler beim Aktualisieren.");
-    }
-  }
-
-  async function updateStatus(id: number, status: LeadStatus) {
-    try {
-      const res = await fetch("/api/leads", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        alert(data?.error || "Status konnte nicht geändert werden.");
-        return;
-      }
-
-      await loadLeads();
-    } catch (err) {
-      console.error("Fehler beim Statuswechsel:", err);
-      alert("Status konnte nicht geändert werden.");
     }
   }
 
@@ -193,9 +143,6 @@ Freundliche Grüße`;
   const activeLeads = leads.filter((lead) => lead.status !== "erledigt");
   const doneLeads = leads.filter((lead) => lead.status === "erledigt");
   const urgentLeads = activeLeads.filter((lead) => lead.urgency === "hoch");
-  const contactedLeads = leads.filter((lead) => lead.status === "kontaktiert");
-  const offerLeads = leads.filter((lead) => lead.status === "angebot_gesendet");
-  const orderedLeads = leads.filter((lead) => lead.status === "beauftragt");
 
   return (
     <main className="page">
@@ -225,27 +172,23 @@ Freundliche Grüße`;
           </div>
 
           <div>
-            <div>🟡</div>
-            <span>Kontaktiert</span>
-            <strong>{contactedLeads.length}</strong>
-          </div>
-
-          <div>
-            <div>🟠</div>
-            <span>Angebot</span>
-            <strong>{offerLeads.length}</strong>
-          </div>
-
-          <div>
-            <div>🟢</div>
-            <span>Beauftragt</span>
-            <strong>{orderedLeads.length}</strong>
-          </div>
-
-          <div>
             <div>✅</div>
             <span>Erledigt</span>
             <strong>{doneLeads.length}</strong>
+          </div>
+
+          <div>
+            <div>🧾</div>
+            <span>Heute</span>
+            <strong>
+              {
+                leads.filter((lead) => {
+                  const today = new Date().toDateString();
+                  const created = new Date(lead.created_at).toDateString();
+                  return today === created;
+                }).length
+              }
+            </strong>
           </div>
         </div>
       </section>
@@ -268,9 +211,6 @@ Freundliche Grüße`;
                 <div className="customer">
                   <h2>{lead.customer_name || "Unbekannter Kunde"}</h2>
                   <p>📍 {lead.city || "Kein Ort"}</p>
-                  <p className={getStatusClass(lead.status)}>
-                    {getStatusLabel(lead.status)}
-                  </p>
                 </div>
 
                 <div
@@ -330,22 +270,6 @@ Freundliche Grüße`;
               <div className="appointmentBox">
                 <h3>Terminvorschlag</h3>
                 <p>{getAppointmentText(lead)}</p>
-              </div>
-
-              <div className="statusBox">
-                <label>Status der Anfrage</label>
-                <select
-                  value={(lead.status as LeadStatus) || "neu"}
-                  onChange={(e) =>
-                    updateStatus(lead.id, e.target.value as LeadStatus)
-                  }
-                >
-                  {statusOptions.map((status) => (
-                    <option key={status.value} value={status.value}>
-                      {status.icon} {status.label}
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div className="actions">
@@ -462,7 +386,7 @@ Freundliche Grüße`;
 
         .stats {
           display: grid;
-          grid-template-columns: repeat(6, 1fr);
+          grid-template-columns: repeat(4, 1fr);
           gap: 28px;
           margin-top: 54px;
           max-width: 980px;
@@ -630,69 +554,6 @@ Freundliche Grüße`;
           margin-top: 22px;
           font-size: 16px;
           white-space: normal;
-        }
-
-        .statusBadge {
-          display: inline-block;
-          width: fit-content;
-          margin-top: 10px;
-          padding: 8px 14px;
-          border-radius: 999px;
-          font-size: 14px;
-          font-weight: 900;
-        }
-
-        .newStatus {
-          background: #dbeafe;
-          color: #155dfc;
-        }
-
-        .contacted {
-          background: #fef3c7;
-          color: #b45309;
-        }
-
-        .offer {
-          background: #ffedd5;
-          color: #c2410c;
-        }
-
-        .ordered {
-          background: #dcfce7;
-          color: #15803d;
-        }
-
-        .doneStatus {
-          background: #e2e8f0;
-          color: #0f172a;
-        }
-
-        .statusBox {
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 20px;
-          padding: 20px;
-          margin-bottom: 24px;
-        }
-
-        .statusBox label {
-          display: block;
-          margin-bottom: 10px;
-          color: #64748b;
-          font-size: 14px;
-          font-weight: 900;
-        }
-
-        .statusBox select {
-          width: 100%;
-          padding: 16px;
-          border-radius: 14px;
-          border: 1px solid #cbd5e1;
-          background: white;
-          color: #0f172a;
-          font-size: 16px;
-          font-weight: 800;
-          cursor: pointer;
         }
 
         .actions {
