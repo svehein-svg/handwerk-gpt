@@ -121,32 +121,6 @@ export default function DashboardPage() {
     }
   }
 
-  function shouldAutoAdvanceStatus(currentStatus: string | null, nextStatus: LeadStatus) {
-    const status = currentStatus || "neu";
-
-    if (status === "erledigt" || status === "beauftragt") {
-      return false;
-    }
-
-    if (nextStatus === "kontaktiert") {
-      return status === "neu";
-    }
-
-    if (nextStatus === "angebot_gesendet") {
-      return status === "neu" || status === "kontaktiert";
-    }
-
-    return false;
-  }
-
-  function autoUpdateStatus(lead: Lead, nextStatus: LeadStatus) {
-    if (!shouldAutoAdvanceStatus(lead.status, nextStatus)) {
-      return;
-    }
-
-    updateStatus(lead.id, nextStatus);
-  }
-
   function getReplyText(lead: Lead) {
     return (
       lead.suggested_reply ||
@@ -226,7 +200,6 @@ Freundliche Grüße`;
   }
 
   const activeLeads = leads.filter((lead) => lead.status !== "erledigt");
-  const newLeads = leads.filter((lead) => !lead.status || lead.status === "neu");
   const doneLeads = leads.filter((lead) => lead.status === "erledigt");
   const urgentLeads = activeLeads.filter((lead) => lead.urgency === "hoch");
   const contactedLeads = leads.filter((lead) => lead.status === "kontaktiert");
@@ -266,7 +239,7 @@ Freundliche Grüße`;
         <div className="stats">
           <div>
             <div>📨</div>
-            <span>Offen</span>
+            <span>Anfragen</span>
             <strong>{activeLeads.length}</strong>
           </div>
 
@@ -274,12 +247,6 @@ Freundliche Grüße`;
             <div>⚡</div>
             <span>Dringend</span>
             <strong>{urgentLeads.length}</strong>
-          </div>
-
-          <div>
-            <div>🔵</div>
-            <span>Neu</span>
-            <strong>{newLeads.length}</strong>
           </div>
 
           <div>
@@ -422,11 +389,7 @@ Freundliche Grüße`;
 
               <div className="actions">
                 {lead.phone && (
-                  <a
-                    href={`tel:${lead.phone}`}
-                    className="call"
-                    onClick={() => autoUpdateStatus(lead, "kontaktiert")}
-                  >
+                  <a href={`tel:${lead.phone}`} className="call">
                     📞 Anrufen
                   </a>
                 )}
@@ -437,29 +400,18 @@ Freundliche Grüße`;
                     target="_blank"
                     rel="noreferrer"
                     className="whatsapp"
-                    onClick={() => autoUpdateStatus(lead, "kontaktiert")}
                   >
                     💬 WhatsApp senden
                   </a>
                 )}
 
                 {lead.email && (
-                  <a
-                    href={getMailLink(lead)}
-                    className="email"
-                    onClick={() => autoUpdateStatus(lead, "kontaktiert")}
-                  >
+                  <a href={getMailLink(lead)} className="email">
                     ✉️ E-Mail senden
                   </a>
                 )}
 
-                <button
-                  onClick={() => {
-                    autoUpdateStatus(lead, "kontaktiert");
-                    copyReply(lead);
-                  }}
-                  className="copy"
-                >
+                <button onClick={() => copyReply(lead)} className="copy">
                   📋 Antwort kopieren
                 </button>
 
@@ -469,29 +421,18 @@ Freundliche Grüße`;
                     target="_blank"
                     rel="noreferrer"
                     className="appointment"
-                    onClick={() => autoUpdateStatus(lead, "angebot_gesendet")}
                   >
                     📅 Termin WhatsApp
                   </a>
                 )}
 
                 {lead.email && (
-                  <a
-                    href={getAppointmentMailLink(lead)}
-                    className="appointmentMail"
-                    onClick={() => autoUpdateStatus(lead, "angebot_gesendet")}
-                  >
+                  <a href={getAppointmentMailLink(lead)} className="appointmentMail">
                     📅 Termin E-Mail
                   </a>
                 )}
 
-                <button
-                  onClick={() => {
-                    autoUpdateStatus(lead, "angebot_gesendet");
-                    copyAppointment(lead);
-                  }}
-                  className="copyAppointment"
-                >
+                <button onClick={() => copyAppointment(lead)} className="copyAppointment">
                   📋 Termin kopieren
                 </button>
 
@@ -560,10 +501,10 @@ Freundliche Grüße`;
 
         .stats {
           display: grid;
-          grid-template-columns: repeat(7, 1fr);
-          gap: 20px;
+          grid-template-columns: repeat(6, 1fr);
+          gap: 28px;
           margin-top: 54px;
-          max-width: 1100px;
+          max-width: 980px;
         }
 
         .stats span {
