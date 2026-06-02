@@ -329,8 +329,6 @@ Freundliche Grüße`;
             <h1>Handwerker Dashboard</h1>
             <p>KI Antworten, WhatsApp Integration und Kundenverwaltung.</p>
           </div>
-
-          <button className="newButton">+ Neue Anfrage</button>
         </div>
 
         <div className="stats">
