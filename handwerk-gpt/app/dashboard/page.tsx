@@ -306,18 +306,14 @@ Freundliche Grüße`;
   }
 
   function getCalendarLink(appointment: LeadAppointment) {
-    const title = encodeURIComponent("Kundentermin");
+  const title = encodeURIComponent("Kundentermin");
 
-    const description = encodeURIComponent(
-      appointment.appointment_text || "Handwerker Termin"
-    );
+  const description = encodeURIComponent(
+    appointment.appointment_text || "Handwerker Termin"
+  );
 
-    const appointmentDate = encodeURIComponent(
-      appointment.appointment_date || ""
-    );
-
-    return `/api/appointments/calendar?title=${title}&description=${description}&appointment_date=${appointmentDate}`;
-  }
+  return `/api/appointments/calendar?title=${title}&description=${description}`;
+}
 
 function getMissingInfoWhatsappLink(lead: Lead) {
     const phone = normalizeGermanWhatsappNumber(lead.phone || "");
@@ -1377,4 +1373,14 @@ function getMissingInfoWhatsappLink(lead: Lead) {
           }
 
           .statusSelect {
-            max
+            max-width: none;
+          }
+
+          .messageMeta {
+            flex-direction: column;
+          }
+        }
+      `}</style>
+    </main>
+  );
+}
