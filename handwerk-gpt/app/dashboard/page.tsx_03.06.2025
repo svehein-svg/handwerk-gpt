@@ -12,14 +12,6 @@ type LeadStatus =
 
 type LeadFilter = "offen" | "neu" | "bearbeitung" | "angebot_gesendet" | "erledigt";
 
-type LeadMessage = {
-  id: string;
-  created_at: string;
-  sender: string;
-  channel: string;
-  message_text: string;
-};
-
 type Lead = {
   id: number;
   created_at: string;
@@ -34,7 +26,6 @@ type Lead = {
   status: string | null;
   suggested_reply: string | null;
   missing_info?: string[] | null;
-  lead_messages?: LeadMessage[];
 };
 
 const statusOptions: { value: LeadStatus; label: string; icon: string }[] = [
@@ -269,6 +260,7 @@ Freundliche Grüße`;
   }
 
   const activeLeads = leads.filter((lead) => lead.status !== "erledigt");
+  const newLeads = leads.filter((lead) => !lead.status || lead.status === "neu");
   const urgentLeads = activeLeads.filter((lead) => lead.urgency === "hoch");
   const offerLeads = leads.filter((lead) => lead.status === "angebot_gesendet");
   const doneLeads = leads.filter((lead) => lead.status === "erledigt");
@@ -340,9 +332,7 @@ Freundliche Grüße`;
               className={activeFilter === filter.value ? "filterButton active" : "filterButton"}
               onClick={() => setActiveFilter(filter.value)}
             >
-              <span>
-                {filter.icon} {filter.label}
-              </span>
+              <span>{filter.icon} {filter.label}</span>
               <strong>{getFilterCount(filter.value)}</strong>
             </button>
           ))}
@@ -359,14 +349,6 @@ Freundliche Grüße`;
             const hasMissingInfo =
               Array.isArray(lead.missing_info) && lead.missing_info.length > 0;
 
-            const messages = Array.isArray(lead.lead_messages)
-              ? [...lead.lead_messages].sort(
-                  (a, b) =>
-                    new Date(a.created_at).getTime() -
-                    new Date(b.created_at).getTime()
-                )
-              : [];
-
             return (
               <article className="leadCard" key={lead.id}>
                 <div className="cardHeader">
@@ -376,22 +358,10 @@ Freundliche Grüße`;
 
                   <div className="customer">
                     <h2>{lead.customer_name || "Unbekannter Kunde"}</h2>
-                    <p>
-                      📍 {lead.city || "Kein Ort"} · {lead.trade || "Gewerk unklar"}
-                    </p>
+                    <p>📍 {lead.city || "Kein Ort"} · {lead.trade || "Gewerk unklar"}</p>
                     <div className="badges">
-                      <span className={getStatusClass(lead.status)}>
-                        {getStatusLabel(lead.status)}
-                      </span>
-                      <span className={getUrgencyClass(lead.urgency)}>
-                        {lead.urgency || "normal"}
-                      </span>
-                      {messages.length > 0 && (
-                        <span className="messageBadge">
-                          💬 {messages.length} Zusatznachricht
-                          {messages.length > 1 ? "en" : ""}
-                        </span>
-                      )}
+                      <span className={getStatusClass(lead.status)}>{getStatusLabel(lead.status)}</span>
+                      <span className={getUrgencyClass(lead.urgency)}>{lead.urgency || "normal"}</span>
                     </div>
                   </div>
 
@@ -421,13 +391,7 @@ Freundliche Grüße`;
                       rel="noreferrer"
                       className="whatsapp"
                       onClick={(event) =>
-                        openLinkAfterStatusUpdate(
-                          event,
-                          lead,
-                          "kontaktiert",
-                          getWhatsappLink(lead),
-                          true
-                        )
+                        openLinkAfterStatusUpdate(event, lead, "kontaktiert", getWhatsappLink(lead), true)
                       }
                     >
                       💬 Antworten
@@ -480,7 +444,7 @@ Freundliche Grüße`;
                 </div>
 
                 <details className="detailsBox">
-                  <summary>Details, Nachrichtenverlauf und Textvorlagen anzeigen</summary>
+                  <summary>Details, E-Mail und Textvorlagen anzeigen</summary>
 
                   <div className="detailGrid">
                     <div>
@@ -501,28 +465,6 @@ Freundliche Grüße`;
                     <div className="textBox">
                       <h3>Originalanfrage</h3>
                       <p>{lead.raw_message}</p>
-                    </div>
-                  )}
-
-                  {messages.length > 0 && (
-                    <div className="textBox messageHistoryBox">
-                      <h3>Nachrichtenverlauf</h3>
-
-                      <div className="messageList">
-                        {messages.map((msg) => (
-                          <div className="messageItem" key={msg.id}>
-                            <div className="messageMeta">
-                              <strong>
-                                {msg.channel === "web" ? "Formular" : msg.channel}
-                              </strong>
-                              <span>
-                                {new Date(msg.created_at).toLocaleString("de-DE")}
-                              </span>
-                            </div>
-                            <p>{msg.message_text}</p>
-                          </div>
-                        ))}
-                      </div>
                     </div>
                   )}
 
@@ -560,12 +502,7 @@ Freundliche Grüße`;
                         href={`tel:${lead.phone}`}
                         className="call"
                         onClick={(event) =>
-                          openLinkAfterStatusUpdate(
-                            event,
-                            lead,
-                            "kontaktiert",
-                            `tel:${lead.phone}`
-                          )
+                          openLinkAfterStatusUpdate(event, lead, "kontaktiert", `tel:${lead.phone}`)
                         }
                       >
                         📞 Anrufen
@@ -577,12 +514,7 @@ Freundliche Grüße`;
                         href={getMailLink(lead)}
                         className="email"
                         onClick={(event) =>
-                          openLinkAfterStatusUpdate(
-                            event,
-                            lead,
-                            "kontaktiert",
-                            getMailLink(lead)
-                          )
+                          openLinkAfterStatusUpdate(event, lead, "kontaktiert", getMailLink(lead))
                         }
                       >
                         ✉️ E-Mail Antwort
@@ -836,19 +768,13 @@ Freundliche Grüße`;
         }
 
         .statusBadge,
-        .urgency,
-        .messageBadge {
+        .urgency {
           display: inline-block;
           width: fit-content;
           padding: 8px 13px;
           border-radius: 999px;
           font-size: 14px;
           font-weight: 900;
-        }
-
-        .messageBadge {
-          background: #e0f2fe;
-          color: #0369a1;
         }
 
         .newStatus {
@@ -1014,38 +940,6 @@ Freundliche Grüße`;
           font-weight: 700;
         }
 
-        .messageHistoryBox {
-          background: #f8fafc;
-          border: 1px solid #dbeafe;
-        }
-
-        .messageList {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .messageItem {
-          background: white;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          padding: 14px;
-        }
-
-        .messageMeta {
-          display: flex;
-          justify-content: space-between;
-          gap: 10px;
-          color: #64748b;
-          font-size: 13px;
-          font-weight: 900;
-          margin-bottom: 8px;
-        }
-
-        .messageMeta strong {
-          color: #155dfc;
-        }
-
         .replyBox {
           background: #e8f2ff;
           border: 1px solid #bfdbfe;
@@ -1122,10 +1016,6 @@ Freundliche Grüße`;
 
           .statusSelect {
             max-width: none;
-          }
-
-          .messageMeta {
-            flex-direction: column;
           }
         }
       `}</style>
