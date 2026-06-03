@@ -10,26 +10,6 @@ function normalizePhone(phone: string) {
     .replace(/^0/, "+49");
 }
 
-async function saveAppointment(leadId: number, appointmentText: string) {
-  if (!appointmentText.trim()) return;
-
-  await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/lead_appointments`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      Prefer: "return=representation",
-    },
-    body: JSON.stringify({
-      lead_id: leadId,
-      appointment_text: appointmentText,
-      status: "erkannt",
-      source: "ki",
-    }),
-  });
-}
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -47,15 +27,25 @@ export async function POST(req: Request) {
           content: `
 Du bist ein erfahrener KI-Assistent für Handwerksbetriebe in Deutschland.
 
-Analysiere Kundenanfragen intelligent und antworte ausschließlich als valides JSON.
+Deine Aufgabe:
+Analysiere Kundenanfragen intelligent und praxisnah für einen Handwerksbetrieb.
 
-Erkenne zusätzlich, ob der Kunde einen Termin, Zeitraum oder eine Verfügbarkeit nennt.
+Wichtig:
+- Antworte ausschließlich als valides JSON.
+- Nutze alle vorhandenen Informationen bestmöglich.
+- Frage nicht unnötig nach, wenn die Anfrage bereits verständlich ist.
+- Erstelle eine konkrete, hilfreiche Antwort an den Kunden.
+- Wenn Informationen fehlen, nenne sie nur in "missing_info".
+- Die "suggested_reply" soll natürlich, freundlich und professionell klingen.
+- Erfinde keine Kontaktdaten.
+- Wenn Name, Telefon, E-Mail oder Ort vom Formular mitgegeben wurden, übernimm sie.
 
-Beispiele:
-- "Mittwoch um 14 Uhr passt" => appointment_detected true
-- "Ich bin morgen ab 15 Uhr zuhause" => appointment_detected true
-- "Können Sie nächste Woche kommen?" => appointment_detected true
-- "Meine Heizung ist kaputt" => appointment_detected false
+Bewerte:
+- trade = passendes Gewerk, z.B. Sanitär, Heizung, Elektro, Dachdecker, Maler, Schreiner, Gartenbau, Allgemein
+- urgency = niedrig, mittel oder hoch
+- site_visit_needed = true, wenn wahrscheinlich ein Vor-Ort-Termin nötig ist
+- summary = kurze intelligente Zusammenfassung der Anfrage
+- suggested_reply = fertige Antwort, die der Betrieb direkt an den Kunden senden könnte
 
 Antworte exakt in diesem JSON-Format:
 
@@ -71,9 +61,7 @@ Antworte exakt in diesem JSON-Format:
   "site_visit_needed": true,
   "missing_info": [],
   "suggested_reply": "",
-  "status": "neu",
-  "appointment_detected": false,
-  "appointment_text": ""
+  "status": "neu"
 }
 `,
         },
@@ -94,13 +82,17 @@ ${body.message || ""}
     });
 
     const raw = completion.choices[0]?.message?.content || "{}";
-    const cleaned = raw.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const cleaned = raw
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
 
     let parsed: any;
 
     try {
       parsed = JSON.parse(cleaned);
-    } catch {
+    } catch (err: any) {
       return NextResponse.json(
         {
           error: "GPT hat kein valides JSON geliefert",
@@ -135,9 +127,7 @@ ${body.message || ""}
       status: parsed.status || "neu",
     };
 
-    const appointmentDetected = parsed.appointment_detected === true;
-    const appointmentText = parsed.appointment_text || "";
-
+    // 1. Prüfen, ob es bereits einen offenen Auftrag mit dieser Telefonnummer gibt
     const searchRes = await fetch(
       `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/leads?phone=eq.${encodeURIComponent(
         finalData.phone
@@ -166,6 +156,7 @@ ${body.message || ""}
     const existingLeads = await searchRes.json();
     const existingLead = existingLeads?.[0];
 
+    // 2. Wenn Auftrag existiert: Nachricht an bestehenden Auftrag anhängen
     if (existingLead) {
       const messageRes = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/lead_messages`,
@@ -198,20 +189,15 @@ ${body.message || ""}
         );
       }
 
-      if (appointmentDetected) {
-        await saveAppointment(existingLead.id, appointmentText);
-      }
-
       return NextResponse.json({
         ok: true,
         mode: "added_to_existing_lead",
         lead_id: existingLead.id,
-        appointment_detected: appointmentDetected,
-        appointment_text: appointmentText,
         data: finalData,
       });
     }
 
+    // 3. Wenn kein offener Auftrag existiert: neuen Auftrag anlegen
     const supabaseRes = await fetch(
       `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/leads`,
       {
@@ -240,18 +226,11 @@ ${body.message || ""}
     }
 
     const insertedLead = await supabaseRes.json();
-    const newLead = insertedLead?.[0] || null;
-
-    if (newLead && appointmentDetected) {
-      await saveAppointment(newLead.id, appointmentText);
-    }
 
     return NextResponse.json({
       ok: true,
       mode: "new_lead_created",
-      lead: newLead,
-      appointment_detected: appointmentDetected,
-      appointment_text: appointmentText,
+      lead: insertedLead?.[0] || null,
       data: finalData,
     });
   } catch (err: any) {
