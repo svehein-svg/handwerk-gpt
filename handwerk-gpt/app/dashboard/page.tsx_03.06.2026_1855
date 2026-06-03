@@ -82,13 +82,6 @@ function getUrgencyClass(urgency: string | null) {
   return "urgency low";
 }
 
-function getAppointmentStatusLabel(status: string | null) {
-  if (status === "bestaetigt") return "✅ Bestätigt";
-  if (status === "erledigt") return "🟢 Erledigt";
-  if (status === "verworfen") return "🗑️ Verworfen";
-  return "📅 Erkannt";
-}
-
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,28 +124,6 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Fehler beim Statuswechsel:", err);
       alert("Status konnte nicht geändert werden.");
-    }
-  }
-
-  async function updateAppointmentStatus(id: string, status: string) {
-    try {
-      const res = await fetch("/api/appointments", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        alert(data?.error || "Terminstatus konnte nicht geändert werden.");
-        return;
-      }
-
-      await loadLeads();
-    } catch (err) {
-      console.error("Fehler beim Terminstatus:", err);
-      alert("Terminstatus konnte nicht geändert werden.");
     }
   }
 
@@ -568,41 +539,9 @@ Freundliche Grüße`;
                           <div className="appointmentDetectedItem" key={appointment.id}>
                             <strong>{appointment.appointment_text}</strong>
                             <span>
-                              Status: {getAppointmentStatusLabel(appointment.status)}
-                            </span>
-                            <span>
                               Erkannt am{" "}
                               {new Date(appointment.created_at).toLocaleString("de-DE")}
                             </span>
-
-                            <div className="appointmentActions">
-                              <button
-                                className="confirmAppointment"
-                                onClick={() =>
-                                  updateAppointmentStatus(appointment.id, "bestaetigt")
-                                }
-                              >
-                                ✅ Bestätigt
-                              </button>
-
-                              <button
-                                className="finishAppointment"
-                                onClick={() =>
-                                  updateAppointmentStatus(appointment.id, "erledigt")
-                                }
-                              >
-                                🟢 Erledigt
-                              </button>
-
-                              <button
-                                className="discardAppointment"
-                                onClick={() =>
-                                  updateAppointmentStatus(appointment.id, "verworfen")
-                                }
-                              >
-                                🗑️ Verwerfen
-                              </button>
-                            </div>
                           </div>
                         ))}
                       </div>
@@ -1155,38 +1094,6 @@ Freundliche Grüße`;
           color: #64748b;
           font-weight: 800;
           font-size: 13px;
-          margin-top: 4px;
-        }
-
-        .appointmentActions {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-top: 12px;
-        }
-
-        .appointmentActions button {
-          border: none;
-          border-radius: 12px;
-          padding: 10px 12px;
-          font-weight: 900;
-          cursor: pointer;
-          font-size: 14px;
-        }
-
-        .confirmAppointment {
-          background: #dcfce7;
-          color: #15803d;
-        }
-
-        .finishAppointment {
-          background: #dbeafe;
-          color: #155dfc;
-        }
-
-        .discardAppointment {
-          background: #fee2e2;
-          color: #dc2626;
         }
 
         .messageHistoryBox {
