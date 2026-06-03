@@ -223,21 +223,6 @@ Passt Ihnen eines dieser Zeitfenster?
 Freundliche Grüße`;
   }
 
-  function getAppointmentConfirmationText(
-    lead: Lead,
-    appointment: LeadAppointment
-  ) {
-    return `Hallo ${lead.customer_name || ""},
-
-wir bestätigen hiermit den Termin:
-
-${appointment.appointment_text}
-
-Vielen Dank. Wir freuen uns auf den Termin.
-
-Freundliche Grüße`;
-  }
-
   function getMissingInfoText(lead: Lead) {
     const missingInfo = Array.isArray(lead.missing_info)
       ? lead.missing_info.filter(Boolean)
@@ -290,18 +275,6 @@ Freundliche Grüße`;
   function getAppointmentWhatsappLink(lead: Lead) {
     const phone = normalizeGermanWhatsappNumber(lead.phone || "");
     const text = encodeURIComponent(getAppointmentText(lead));
-    return `https://wa.me/${phone}?text=${text}`;
-  }
-
-  function getAppointmentConfirmationWhatsappLink(
-    lead: Lead,
-    appointment: LeadAppointment
-  ) {
-    const phone = normalizeGermanWhatsappNumber(lead.phone || "");
-    const text = encodeURIComponent(
-      getAppointmentConfirmationText(lead, appointment)
-    );
-
     return `https://wa.me/${phone}?text=${text}`;
   }
 
@@ -603,26 +576,6 @@ Freundliche Grüße`;
                             </span>
 
                             <div className="appointmentActions">
-                              {lead.phone && (
-                                <a
-                                  href={getAppointmentConfirmationWhatsappLink(
-                                    lead,
-                                    appointment
-                                  )}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="sendAppointmentConfirmation"
-                                  onClick={() =>
-                                    updateAppointmentStatus(
-                                      appointment.id,
-                                      "bestaetigt"
-                                    )
-                                  }
-                                >
-                                  💬 Bestätigung senden
-                                </a>
-                              )}
-
                               <button
                                 className="confirmAppointment"
                                 onClick={() =>
@@ -1212,21 +1165,13 @@ Freundliche Grüße`;
           margin-top: 12px;
         }
 
-        .appointmentActions button,
-        .appointmentActions a {
+        .appointmentActions button {
           border: none;
           border-radius: 12px;
           padding: 10px 12px;
           font-weight: 900;
           cursor: pointer;
           font-size: 14px;
-          text-decoration: none;
-          display: inline-block;
-        }
-
-        .sendAppointmentConfirmation {
-          background: #22c55e;
-          color: white;
         }
 
         .confirmAppointment {
