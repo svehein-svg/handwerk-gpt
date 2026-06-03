@@ -20,15 +20,6 @@ type LeadMessage = {
   message_text: string;
 };
 
-type LeadAppointment = {
-  id: string;
-  created_at: string;
-  appointment_text: string;
-  appointment_date: string | null;
-  status: string | null;
-  source: string | null;
-};
-
 type Lead = {
   id: number;
   created_at: string;
@@ -44,7 +35,6 @@ type Lead = {
   suggested_reply: string | null;
   missing_info?: string[] | null;
   lead_messages?: LeadMessage[];
-  lead_appointments?: LeadAppointment[];
 };
 
 const statusOptions: { value: LeadStatus; label: string; icon: string }[] = [
@@ -377,14 +367,6 @@ Freundliche Grüße`;
                 )
               : [];
 
-            const appointments = Array.isArray(lead.lead_appointments)
-              ? [...lead.lead_appointments].sort(
-                  (a, b) =>
-                    new Date(b.created_at).getTime() -
-                    new Date(a.created_at).getTime()
-                )
-              : [];
-
             return (
               <article className="leadCard" key={lead.id}>
                 <div className="cardHeader">
@@ -404,18 +386,10 @@ Freundliche Grüße`;
                       <span className={getUrgencyClass(lead.urgency)}>
                         {lead.urgency || "normal"}
                       </span>
-
                       {messages.length > 0 && (
                         <span className="messageBadge">
                           💬 {messages.length} Zusatznachricht
                           {messages.length > 1 ? "en" : ""}
-                        </span>
-                      )}
-
-                      {appointments.length > 0 && (
-                        <span className="appointmentBadge">
-                          📅 {appointments.length} Termin
-                          {appointments.length > 1 ? "e" : ""} erkannt
                         </span>
                       )}
                     </div>
@@ -506,7 +480,7 @@ Freundliche Grüße`;
                 </div>
 
                 <details className="detailsBox">
-                  <summary>Details, Nachrichtenverlauf, Termine und Textvorlagen anzeigen</summary>
+                  <summary>Details, Nachrichtenverlauf und Textvorlagen anzeigen</summary>
 
                   <div className="detailGrid">
                     <div>
@@ -527,24 +501,6 @@ Freundliche Grüße`;
                     <div className="textBox">
                       <h3>Originalanfrage</h3>
                       <p>{lead.raw_message}</p>
-                    </div>
-                  )}
-
-                  {appointments.length > 0 && (
-                    <div className="textBox appointmentDetectedBox">
-                      <h3>📅 Erkannte Termine</h3>
-
-                      <div className="appointmentDetectedList">
-                        {appointments.map((appointment) => (
-                          <div className="appointmentDetectedItem" key={appointment.id}>
-                            <strong>{appointment.appointment_text}</strong>
-                            <span>
-                              Erkannt am{" "}
-                              {new Date(appointment.created_at).toLocaleString("de-DE")}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
                     </div>
                   )}
 
@@ -881,8 +837,7 @@ Freundliche Grüße`;
 
         .statusBadge,
         .urgency,
-        .messageBadge,
-        .appointmentBadge {
+        .messageBadge {
           display: inline-block;
           width: fit-content;
           padding: 8px 13px;
@@ -894,11 +849,6 @@ Freundliche Grüße`;
         .messageBadge {
           background: #e0f2fe;
           color: #0369a1;
-        }
-
-        .appointmentBadge {
-          background: #dcfce7;
-          color: #15803d;
         }
 
         .newStatus {
@@ -1062,38 +1012,6 @@ Freundliche Grüße`;
         .textBox p {
           margin: 0;
           font-weight: 700;
-        }
-
-        .appointmentDetectedBox {
-          background: #ecfdf5;
-          border: 1px solid #86efac;
-        }
-
-        .appointmentDetectedList {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .appointmentDetectedItem {
-          background: white;
-          border: 1px solid #bbf7d0;
-          border-radius: 16px;
-          padding: 14px;
-        }
-
-        .appointmentDetectedItem strong {
-          display: block;
-          color: #15803d;
-          font-size: 17px;
-          margin-bottom: 6px;
-        }
-
-        .appointmentDetectedItem span {
-          display: block;
-          color: #64748b;
-          font-weight: 800;
-          font-size: 13px;
         }
 
         .messageHistoryBox {
