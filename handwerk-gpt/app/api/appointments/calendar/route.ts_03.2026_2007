@@ -1,0 +1,70 @@
+import { NextResponse } from "next/server";
+
+function escapeIcsText(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
+}
+
+function formatDateForIcs(date: Date) {
+  return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+}
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+
+  const title = searchParams.get("title") || "Handwerker Termin";
+  const description = searchParams.get("description") || "";
+  const appointmentDate = searchParams.get("appointment_date");
+
+  if (!appointmentDate) {
+    return NextResponse.json(
+      {
+        error: "appointment_date fehlt im Kalenderlink",
+      },
+      { status: 400 }
+    );
+  }
+
+  const start = new Date(appointmentDate);
+
+  if (Number.isNaN(start.getTime())) {
+    return NextResponse.json(
+      {
+        error: "appointment_date ist ungültig",
+        appointmentDate,
+      },
+      { status: 400 }
+    );
+  }
+
+  const now = new Date();
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+  const safeTitle = escapeIcsText(title);
+  const safeDescription = escapeIcsText(description);
+
+  const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//HandwerkerGPT//DE
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:${Date.now()}@handwerkergpt.de
+DTSTAMP:${formatDateForIcs(now)}
+DTSTART:${formatDateForIcs(start)}
+DTEND:${formatDateForIcs(end)}
+SUMMARY:${safeTitle}
+DESCRIPTION:${safeDescription}
+END:VEVENT
+END:VCALENDAR`;
+
+  return new NextResponse(ics, {
+    headers: {
+      "Content-Type": "text/calendar; charset=utf-8",
+      "Content-Disposition": 'attachment; filename="termin.ics"',
+    },
+  });
+}
