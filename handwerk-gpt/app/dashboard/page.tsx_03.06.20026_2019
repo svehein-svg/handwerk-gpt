@@ -448,13 +448,11 @@ function getMissingInfoWhatsappLink(lead: Lead) {
               : [];
 
             const appointments = Array.isArray(lead.lead_appointments)
-              ? lead.lead_appointments
-                  .filter((appointment) => appointment.status !== "verworfen")
-                  .sort(
-                    (a, b) =>
-                      new Date(b.created_at).getTime() -
-                      new Date(a.created_at).getTime()
-                  )
+              ? [...lead.lead_appointments].sort(
+                  (a, b) =>
+                    new Date(b.created_at).getTime() -
+                    new Date(a.created_at).getTime()
+                )
               : [];
 
             return (
