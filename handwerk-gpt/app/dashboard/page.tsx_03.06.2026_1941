@@ -1,0 +1,1386 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import type { MouseEvent } from "react";
+
+type LeadStatus =
+  | "neu"
+  | "kontaktiert"
+  | "angebot_gesendet"
+  | "beauftragt"
+  | "erledigt";
+
+type LeadFilter = "offen" | "neu" | "bearbeitung" | "angebot_gesendet" | "erledigt";
+
+type LeadMessage = {
+  id: string;
+  created_at: string;
+  sender: string;
+  channel: string;
+  message_text: string;
+};
+
+type LeadAppointment = {
+  id: string;
+  created_at: string;
+  appointment_text: string;
+  appointment_date: string | null;
+  status: string | null;
+  source: string | null;
+};
+
+type Lead = {
+  id: number;
+  created_at: string;
+  customer_name: string | null;
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  raw_message: string | null;
+  trade: string | null;
+  summary: string | null;
+  urgency: string | null;
+  status: string | null;
+  suggested_reply: string | null;
+  missing_info?: string[] | null;
+  lead_messages?: LeadMessage[];
+  lead_appointments?: LeadAppointment[];
+};
+
+const statusOptions: { value: LeadStatus; label: string; icon: string }[] = [
+  { value: "neu", label: "Neu", icon: "🔵" },
+  { value: "kontaktiert", label: "Kontaktiert", icon: "🟡" },
+  { value: "angebot_gesendet", label: "Angebot gesendet", icon: "🟠" },
+  { value: "beauftragt", label: "Beauftragt", icon: "🟢" },
+  { value: "erledigt", label: "Erledigt", icon: "⚫" },
+];
+
+const filterOptions: { value: LeadFilter; label: string; icon: string }[] = [
+  { value: "offen", label: "Alle offenen", icon: "📨" },
+  { value: "neu", label: "Neu", icon: "🔵" },
+  { value: "bearbeitung", label: "In Bearbeitung", icon: "🟡" },
+  { value: "angebot_gesendet", label: "Angebote", icon: "🟠" },
+  { value: "erledigt", label: "Erledigt", icon: "✅" },
+];
+
+function getStatusLabel(status: string | null) {
+  const found = statusOptions.find((item) => item.value === status);
+  return found ? `${found.icon} ${found.label}` : "🔵 Neu";
+}
+
+function getStatusClass(status: string | null) {
+  if (status === "kontaktiert") return "statusBadge contacted";
+  if (status === "angebot_gesendet") return "statusBadge offer";
+  if (status === "beauftragt") return "statusBadge ordered";
+  if (status === "erledigt") return "statusBadge doneStatus";
+  return "statusBadge newStatus";
+}
+
+function getUrgencyClass(urgency: string | null) {
+  if (urgency === "hoch") return "urgency high";
+  if (urgency === "mittel") return "urgency medium";
+  return "urgency low";
+}
+
+function getAppointmentStatusLabel(status: string | null) {
+  if (status === "bestaetigt") return "✅ Bestätigt";
+  if (status === "erledigt") return "🟢 Erledigt";
+  if (status === "verworfen") return "🗑️ Verworfen";
+  return "📅 Erkannt";
+}
+
+export default function DashboardPage() {
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<LeadFilter>("offen");
+
+  useEffect(() => {
+    loadLeads();
+    const interval = setInterval(loadLeads, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function loadLeads() {
+    try {
+      const res = await fetch("/api/leads", { cache: "no-store" });
+      const data = await res.json();
+      setLeads(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Fehler beim Laden:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function updateStatus(id: number, status: LeadStatus) {
+    try {
+      const res = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        alert(data?.error || "Status konnte nicht geändert werden.");
+        return;
+      }
+
+      await loadLeads();
+    } catch (err) {
+      console.error("Fehler beim Statuswechsel:", err);
+      alert("Status konnte nicht geändert werden.");
+    }
+  }
+
+  async function updateAppointmentStatus(id: string, status: string) {
+    try {
+      const res = await fetch("/api/appointments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        alert(data?.error || "Terminstatus konnte nicht geändert werden.");
+        return;
+      }
+
+      await loadLeads();
+    } catch (err) {
+      console.error("Fehler beim Terminstatus:", err);
+      alert("Terminstatus konnte nicht geändert werden.");
+    }
+  }
+
+  async function markAsDone(id: number) {
+    await updateStatus(id, "erledigt");
+  }
+
+  function shouldAutoAdvanceStatus(currentStatus: string | null, nextStatus: LeadStatus) {
+    const status = currentStatus || "neu";
+
+    if (status === "erledigt" || status === "beauftragt") return false;
+    if (nextStatus === "kontaktiert") return status === "neu";
+    if (nextStatus === "angebot_gesendet") return status === "neu" || status === "kontaktiert";
+
+    return false;
+  }
+
+  async function autoUpdateStatus(lead: Lead, nextStatus: LeadStatus) {
+    if (!shouldAutoAdvanceStatus(lead.status, nextStatus)) return;
+    await updateStatus(lead.id, nextStatus);
+  }
+
+  async function openLinkAfterStatusUpdate(
+    event: MouseEvent<HTMLAnchorElement>,
+    lead: Lead,
+    nextStatus: LeadStatus,
+    href: string,
+    openInNewTab = false
+  ) {
+    event.preventDefault();
+    await autoUpdateStatus(lead, nextStatus);
+
+    if (openInNewTab) {
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    window.location.href = href;
+  }
+
+  function getReplyText(lead: Lead) {
+    return (
+      lead.suggested_reply ||
+      `Hallo ${lead.customer_name || ""},
+
+vielen Dank für Ihre Anfrage.
+
+Wir prüfen Ihr Anliegen und melden uns zeitnah bei Ihnen.
+
+Freundliche Grüße`
+    );
+  }
+
+  function getAppointmentText(lead: Lead) {
+    return `Hallo ${lead.customer_name || ""},
+
+vielen Dank für Ihre Anfrage.
+
+Für eine gute Einschätzung wäre ein kurzer Vor-Ort-Termin sinnvoll.
+
+Wir könnten Ihnen einen Termin in einem der folgenden Zeitfenster anbieten:
+
+- werktags vormittags zwischen 09:00 und 12:00 Uhr
+- werktags nachmittags zwischen 14:00 und 17:00 Uhr
+
+Passt Ihnen eines dieser Zeitfenster?
+
+Freundliche Grüße`;
+  }
+
+  function getAppointmentConfirmationText(
+    lead: Lead,
+    appointment: LeadAppointment
+  ) {
+    return `Hallo ${lead.customer_name || ""},
+
+wir bestätigen hiermit den Termin:
+
+${appointment.appointment_text}
+
+Vielen Dank. Wir freuen uns auf den Termin.
+
+Freundliche Grüße`;
+  }
+
+  function getMissingInfoText(lead: Lead) {
+    const missingInfo = Array.isArray(lead.missing_info)
+      ? lead.missing_info.filter(Boolean)
+      : [];
+
+    if (missingInfo.length === 0) {
+      return `Hallo ${lead.customer_name || ""},
+
+vielen Dank für Ihre Anfrage.
+
+Für eine bessere Einschätzung bräuchten wir bitte noch ein paar zusätzliche Informationen.
+
+Könnten Sie uns bitte noch kurz weitere Details und, falls möglich, Fotos schicken?
+
+Dann können wir Ihnen schneller weiterhelfen.
+
+Freundliche Grüße`;
+    }
+
+    const list = missingInfo.map((item) => `- ${item}`).join("\n");
+
+    return `Hallo ${lead.customer_name || ""},
+
+vielen Dank für Ihre Anfrage.
+
+Für eine bessere Einschätzung bräuchten wir bitte noch folgende Informationen:
+
+${list}
+
+Dann können wir Ihnen schneller weiterhelfen.
+
+Freundliche Grüße`;
+  }
+
+  function normalizeGermanWhatsappNumber(phone: string) {
+    let cleaned = phone.replace(/\D/g, "");
+
+    if (cleaned.startsWith("0049")) cleaned = cleaned.substring(2);
+    if (cleaned.startsWith("0")) cleaned = "49" + cleaned.substring(1);
+
+    return cleaned;
+  }
+
+  function getWhatsappLink(lead: Lead) {
+    const phone = normalizeGermanWhatsappNumber(lead.phone || "");
+    const text = encodeURIComponent(getReplyText(lead));
+    return `https://wa.me/${phone}?text=${text}`;
+  }
+
+  function getAppointmentWhatsappLink(lead: Lead) {
+    const phone = normalizeGermanWhatsappNumber(lead.phone || "");
+    const text = encodeURIComponent(getAppointmentText(lead));
+    return `https://wa.me/${phone}?text=${text}`;
+  }
+
+  function getAppointmentConfirmationWhatsappLink(
+    lead: Lead,
+    appointment: LeadAppointment
+  ) {
+    const phone = normalizeGermanWhatsappNumber(lead.phone || "");
+    const text = encodeURIComponent(
+      getAppointmentConfirmationText(lead, appointment)
+    );
+
+    return `https://wa.me/${phone}?text=${text}`;
+  }
+
+  function getCalendarLink(appointment: LeadAppointment) {
+  const title = encodeURIComponent("Kundentermin");
+
+  const description = encodeURIComponent(
+    appointment.appointment_text || "Handwerker Termin"
+  );
+
+  return `/api/appointments/calendar?title=${title}&description=${description}`;
+}
+
+function getMissingInfoWhatsappLink(lead: Lead) {
+    const phone = normalizeGermanWhatsappNumber(lead.phone || "");
+    const text = encodeURIComponent(getMissingInfoText(lead));
+    return `https://wa.me/${phone}?text=${text}`;
+  }
+
+  function getMailLink(lead: Lead) {
+    const subject = encodeURIComponent("Ihre Anfrage");
+    const body = encodeURIComponent(getReplyText(lead));
+    return `mailto:${lead.email}?subject=${subject}&body=${body}`;
+  }
+
+  function getAppointmentMailLink(lead: Lead) {
+    const subject = encodeURIComponent("Terminvorschlag zu Ihrer Anfrage");
+    const body = encodeURIComponent(getAppointmentText(lead));
+    return `mailto:${lead.email}?subject=${subject}&body=${body}`;
+  }
+
+  function getMissingInfoMailLink(lead: Lead) {
+    const subject = encodeURIComponent("Rückfrage zu Ihrer Anfrage");
+    const body = encodeURIComponent(getMissingInfoText(lead));
+    return `mailto:${lead.email}?subject=${subject}&body=${body}`;
+  }
+
+  async function copyText(text: string, message: string) {
+    await navigator.clipboard.writeText(text);
+    alert(message);
+  }
+
+  const activeLeads = leads.filter((lead) => lead.status !== "erledigt");
+  const urgentLeads = activeLeads.filter((lead) => lead.urgency === "hoch");
+  const offerLeads = leads.filter((lead) => lead.status === "angebot_gesendet");
+  const doneLeads = leads.filter((lead) => lead.status === "erledigt");
+
+  const displayedLeads = leads.filter((lead) => {
+    const status = lead.status || "neu";
+
+    if (activeFilter === "offen") return status !== "erledigt";
+    if (activeFilter === "bearbeitung") return status === "kontaktiert" || status === "beauftragt";
+    return status === activeFilter;
+  });
+
+  function getFilterCount(filter: LeadFilter) {
+    if (filter === "offen") return activeLeads.length;
+    if (filter === "bearbeitung") {
+      return leads.filter(
+        (lead) => lead.status === "kontaktiert" || lead.status === "beauftragt"
+      ).length;
+    }
+    return leads.filter((lead) => (lead.status || "neu") === filter).length;
+  }
+
+  function getEmptyText() {
+    const filter = filterOptions.find((item) => item.value === activeFilter);
+    return `Keine Anfragen für „${filter?.label || activeFilter}“ vorhanden.`;
+  }
+
+  return (
+    <main className="page">
+      <section className="hero">
+        <div className="badge">✨ KI Anfrage Assistent</div>
+
+        <div className="heroTop">
+          <div>
+            <h1>Handwerker Dashboard</h1>
+            <p>Was muss heute erledigt werden?</p>
+          </div>
+        </div>
+
+        <div className="stats">
+          <div className="statCard">
+            <span>📨 Offen</span>
+            <strong>{activeLeads.length}</strong>
+          </div>
+
+          <div className="statCard urgentStat">
+            <span>⚡ Dringend</span>
+            <strong>{urgentLeads.length}</strong>
+          </div>
+
+          <div className="statCard">
+            <span>🟠 Angebote</span>
+            <strong>{offerLeads.length}</strong>
+          </div>
+
+          <div className="statCard">
+            <span>✅ Erledigt</span>
+            <strong>{doneLeads.length}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="content">
+        <div className="filterBar">
+          {filterOptions.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              className={activeFilter === filter.value ? "filterButton active" : "filterButton"}
+              onClick={() => setActiveFilter(filter.value)}
+            >
+              <span>
+                {filter.icon} {filter.label}
+              </span>
+              <strong>{getFilterCount(filter.value)}</strong>
+            </button>
+          ))}
+        </div>
+
+        {loading && <div className="empty">Lade Daten...</div>}
+
+        {!loading && displayedLeads.length === 0 && (
+          <div className="empty">{getEmptyText()}</div>
+        )}
+
+        <div className="leadList">
+          {displayedLeads.map((lead) => {
+            const hasMissingInfo =
+              Array.isArray(lead.missing_info) && lead.missing_info.length > 0;
+
+            const messages = Array.isArray(lead.lead_messages)
+              ? [...lead.lead_messages].sort(
+                  (a, b) =>
+                    new Date(a.created_at).getTime() -
+                    new Date(b.created_at).getTime()
+                )
+              : [];
+
+            const appointments = Array.isArray(lead.lead_appointments)
+              ? [...lead.lead_appointments].sort(
+                  (a, b) =>
+                    new Date(b.created_at).getTime() -
+                    new Date(a.created_at).getTime()
+                )
+              : [];
+
+            return (
+              <article className="leadCard" key={lead.id}>
+                <div className="cardHeader">
+                  <div className="avatar">
+                    {(lead.customer_name || "K").charAt(0).toUpperCase()}
+                  </div>
+
+                  <div className="customer">
+                    <h2>{lead.customer_name || "Unbekannter Kunde"}</h2>
+                    <p>
+                      📍 {lead.city || "Kein Ort"} · {lead.trade || "Gewerk unklar"}
+                    </p>
+                    <div className="badges">
+                      <span className={getStatusClass(lead.status)}>
+                        {getStatusLabel(lead.status)}
+                      </span>
+                      <span className={getUrgencyClass(lead.urgency)}>
+                        {lead.urgency || "normal"}
+                      </span>
+
+                      {messages.length > 0 && (
+                        <span className="messageBadge">
+                          💬 {messages.length} Zusatznachricht
+                          {messages.length > 1 ? "en" : ""}
+                        </span>
+                      )}
+
+                      {appointments.length > 0 && (
+                        <span className="appointmentBadge">
+                          📅 {appointments.length} Termin
+                          {appointments.length > 1 ? "e" : ""} erkannt
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <select
+                    className="statusSelect"
+                    value={(lead.status as LeadStatus) || "neu"}
+                    onChange={(e) => updateStatus(lead.id, e.target.value as LeadStatus)}
+                  >
+                    {statusOptions.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.icon} {status.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="summaryBox">
+                  <span>Problem</span>
+                  <p>{lead.summary || lead.raw_message || "Keine Beschreibung vorhanden."}</p>
+                </div>
+
+                <div className="primaryActions">
+                  {lead.phone && (
+                    <a
+                      href={getWhatsappLink(lead)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="whatsapp"
+                      onClick={(event) =>
+                        openLinkAfterStatusUpdate(
+                          event,
+                          lead,
+                          "kontaktiert",
+                          getWhatsappLink(lead),
+                          true
+                        )
+                      }
+                    >
+                      💬 Antworten
+                    </a>
+                  )}
+
+                  {hasMissingInfo && lead.phone && (
+                    <a
+                      href={getMissingInfoWhatsappLink(lead)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="missingWhatsapp"
+                      onClick={(event) =>
+                        openLinkAfterStatusUpdate(
+                          event,
+                          lead,
+                          "kontaktiert",
+                          getMissingInfoWhatsappLink(lead),
+                          true
+                        )
+                      }
+                    >
+                      ❓ Infos anfragen
+                    </a>
+                  )}
+
+                  {lead.phone && (
+                    <a
+                      href={getAppointmentWhatsappLink(lead)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="appointment"
+                      onClick={(event) =>
+                        openLinkAfterStatusUpdate(
+                          event,
+                          lead,
+                          "angebot_gesendet",
+                          getAppointmentWhatsappLink(lead),
+                          true
+                        )
+                      }
+                    >
+                      📅 Termin
+                    </a>
+                  )}
+
+                  <button onClick={() => markAsDone(lead.id)} className="done">
+                    ✅ Erledigt
+                  </button>
+                </div>
+
+                <details className="detailsBox">
+                  <summary>Details, Nachrichtenverlauf, Termine und Textvorlagen anzeigen</summary>
+
+                  <div className="detailGrid">
+                    <div>
+                      <span>Telefon</span>
+                      <strong>{lead.phone || "-"}</strong>
+                    </div>
+                    <div>
+                      <span>E-Mail</span>
+                      <strong>{lead.email || "-"}</strong>
+                    </div>
+                    <div>
+                      <span>Erstellt</span>
+                      <strong>{new Date(lead.created_at).toLocaleString("de-DE")}</strong>
+                    </div>
+                  </div>
+
+                  {lead.raw_message && (
+                    <div className="textBox">
+                      <h3>Originalanfrage</h3>
+                      <p>{lead.raw_message}</p>
+                    </div>
+                  )}
+
+                  {appointments.length > 0 && (
+                    <div className="textBox appointmentDetectedBox">
+                      <h3>📅 Erkannte Termine</h3>
+
+                      <div className="appointmentDetectedList">
+                        {appointments.map((appointment) => (
+                          <div className="appointmentDetectedItem" key={appointment.id}>
+                            <strong>{appointment.appointment_text}</strong>
+                            <span>
+                              Status: {getAppointmentStatusLabel(appointment.status)}
+                            </span>
+                            <span>
+                              Erkannt am{" "}
+                              {new Date(appointment.created_at).toLocaleString("de-DE")}
+                            </span>
+
+                            <div className="appointmentActions">
+                              {lead.phone && (
+                                <a
+                                  href={getAppointmentConfirmationWhatsappLink(
+                                    lead,
+                                    appointment
+                                  )}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="sendAppointmentConfirmation"
+                                  onClick={() =>
+                                    updateAppointmentStatus(
+                                      appointment.id,
+                                      "bestaetigt"
+                                    )
+                                  }
+                                >
+                                  💬 Bestätigung senden
+                                </a>
+                              )}
+
+                              <a
+                                href={getCalendarLink(appointment)}
+                                className="calendarAppointment"
+                              >
+                                📅 Kalenderdatei
+                              </a>
+
+                              <button
+                                className="confirmAppointment"
+                                onClick={() =>
+                                  updateAppointmentStatus(appointment.id, "bestaetigt")
+                                }
+                              >
+                                ✅ Bestätigt
+                              </button>
+
+                              <button
+                                className="finishAppointment"
+                                onClick={() =>
+                                  updateAppointmentStatus(appointment.id, "erledigt")
+                                }
+                              >
+                                🟢 Erledigt
+                              </button>
+
+                              <button
+                                className="discardAppointment"
+                                onClick={() =>
+                                  updateAppointmentStatus(appointment.id, "verworfen")
+                                }
+                              >
+                                🗑️ Verwerfen
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {messages.length > 0 && (
+                    <div className="textBox messageHistoryBox">
+                      <h3>Nachrichtenverlauf</h3>
+
+                      <div className="messageList">
+                        {messages.map((msg) => (
+                          <div className="messageItem" key={msg.id}>
+                            <div className="messageMeta">
+                              <strong>
+                                {msg.channel === "web" ? "Formular" : msg.channel}
+                              </strong>
+                              <span>
+                                {new Date(msg.created_at).toLocaleString("de-DE")}
+                              </span>
+                            </div>
+                            <p>{msg.message_text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {hasMissingInfo && (
+                    <div className="textBox warningBox">
+                      <h3>Fehlende Informationen</h3>
+                      <ul>
+                        {lead.missing_info?.map((item, index) => (
+                          <li key={index}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="textBox replyBox">
+                    <h3>KI-Antwort</h3>
+                    <p>{getReplyText(lead)}</p>
+                  </div>
+
+                  {hasMissingInfo && (
+                    <div className="textBox missingRequestBox">
+                      <h3>Rückfrage</h3>
+                      <p>{getMissingInfoText(lead)}</p>
+                    </div>
+                  )}
+
+                  <div className="textBox appointmentBox">
+                    <h3>Terminvorschlag</h3>
+                    <p>{getAppointmentText(lead)}</p>
+                  </div>
+
+                  <div className="secondaryActions">
+                    {lead.phone && (
+                      <a
+                        href={`tel:${lead.phone}`}
+                        className="call"
+                        onClick={(event) =>
+                          openLinkAfterStatusUpdate(
+                            event,
+                            lead,
+                            "kontaktiert",
+                            `tel:${lead.phone}`
+                          )
+                        }
+                      >
+                        📞 Anrufen
+                      </a>
+                    )}
+
+                    {lead.email && (
+                      <a
+                        href={getMailLink(lead)}
+                        className="email"
+                        onClick={(event) =>
+                          openLinkAfterStatusUpdate(
+                            event,
+                            lead,
+                            "kontaktiert",
+                            getMailLink(lead)
+                          )
+                        }
+                      >
+                        ✉️ E-Mail Antwort
+                      </a>
+                    )}
+
+                    {hasMissingInfo && lead.email && (
+                      <a
+                        href={getMissingInfoMailLink(lead)}
+                        className="missingMail"
+                        onClick={(event) =>
+                          openLinkAfterStatusUpdate(
+                            event,
+                            lead,
+                            "kontaktiert",
+                            getMissingInfoMailLink(lead)
+                          )
+                        }
+                      >
+                        ❓ Infos per E-Mail
+                      </a>
+                    )}
+
+                    {lead.email && (
+                      <a
+                        href={getAppointmentMailLink(lead)}
+                        className="appointmentMail"
+                        onClick={(event) =>
+                          openLinkAfterStatusUpdate(
+                            event,
+                            lead,
+                            "angebot_gesendet",
+                            getAppointmentMailLink(lead)
+                          )
+                        }
+                      >
+                        📅 Termin E-Mail
+                      </a>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        autoUpdateStatus(lead, "kontaktiert");
+                        copyText(getReplyText(lead), "KI-Antwort wurde kopiert.");
+                      }}
+                      className="copy"
+                    >
+                      📋 Antwort kopieren
+                    </button>
+
+                    {hasMissingInfo && (
+                      <button
+                        onClick={() => {
+                          autoUpdateStatus(lead, "kontaktiert");
+                          copyText(
+                            getMissingInfoText(lead),
+                            "Rückfrage zu fehlenden Informationen wurde kopiert."
+                          );
+                        }}
+                        className="copyMissing"
+                      >
+                        📋 Infos kopieren
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        autoUpdateStatus(lead, "angebot_gesendet");
+                        copyText(getAppointmentText(lead), "Terminvorschlag wurde kopiert.");
+                      }}
+                      className="copyAppointment"
+                    >
+                      📋 Termin kopieren
+                    </button>
+                  </div>
+                </details>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <style jsx>{`
+        .page {
+          min-height: 100vh;
+          background: #eef3f9;
+          font-family: Arial, Helvetica, sans-serif;
+          color: #061126;
+        }
+
+        .hero {
+          background: linear-gradient(120deg, #0b2d6b, #155dfc);
+          color: white;
+          padding: 42px 7% 34px;
+        }
+
+        .badge {
+          display: inline-block;
+          background: rgba(255, 255, 255, 0.16);
+          padding: 9px 18px;
+          border-radius: 999px;
+          font-weight: 800;
+          margin-bottom: 24px;
+        }
+
+        .heroTop {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 30px;
+        }
+
+        h1 {
+          margin: 0;
+          font-size: 54px;
+          line-height: 1;
+          letter-spacing: -2px;
+        }
+
+        .hero p {
+          font-size: 20px;
+          margin-top: 16px;
+          opacity: 0.95;
+        }
+
+        .stats {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 18px;
+          margin-top: 44px;
+          max-width: 900px;
+        }
+
+        .statCard {
+          background: rgba(255, 255, 255, 0.13);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          border-radius: 22px;
+          padding: 20px;
+        }
+
+        .statCard span {
+          display: block;
+          font-weight: 800;
+          opacity: 0.95;
+        }
+
+        .statCard strong {
+          display: block;
+          margin-top: 10px;
+          font-size: 30px;
+        }
+
+        .urgentStat {
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .content {
+          padding: 30px 7% 60px;
+        }
+
+        .filterBar {
+          width: min(1100px, 100%);
+          margin: 0 auto 24px;
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 12px;
+        }
+
+        .filterButton {
+          border: 1px solid #dbe3ef;
+          background: white;
+          color: #0f172a;
+          padding: 14px;
+          border-radius: 16px;
+          cursor: pointer;
+          font-weight: 900;
+          text-align: left;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .filterButton span {
+          display: block;
+          font-size: 14px;
+          line-height: 1.3;
+        }
+
+        .filterButton strong {
+          display: block;
+          margin-top: 8px;
+          font-size: 20px;
+        }
+
+        .filterButton.active {
+          background: #0f172a;
+          color: white;
+          border-color: #0f172a;
+        }
+
+        .leadList {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+          align-items: center;
+        }
+
+        .leadCard {
+          width: min(1100px, 100%);
+          background: white;
+          border-radius: 26px;
+          padding: 24px;
+          box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+        }
+
+        .cardHeader {
+          display: grid;
+          grid-template-columns: 64px 1fr 230px;
+          gap: 18px;
+          align-items: center;
+        }
+
+        .avatar {
+          width: 58px;
+          height: 58px;
+          border-radius: 999px;
+          background: #dbeafe;
+          color: #155dfc;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 26px;
+          font-weight: 900;
+        }
+
+        .customer h2 {
+          margin: 0;
+          font-size: 30px;
+          letter-spacing: -1px;
+        }
+
+        .customer p {
+          margin: 7px 0 0;
+          color: #334155;
+          font-weight: 800;
+        }
+
+        .badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 10px;
+        }
+
+        .statusBadge,
+        .urgency,
+        .messageBadge,
+        .appointmentBadge {
+          display: inline-block;
+          width: fit-content;
+          padding: 8px 13px;
+          border-radius: 999px;
+          font-size: 14px;
+          font-weight: 900;
+        }
+
+        .messageBadge {
+          background: #e0f2fe;
+          color: #0369a1;
+        }
+
+        .appointmentBadge {
+          background: #dcfce7;
+          color: #15803d;
+        }
+
+        .newStatus {
+          background: #dbeafe;
+          color: #155dfc;
+        }
+
+        .contacted {
+          background: #fef3c7;
+          color: #b45309;
+        }
+
+        .offer {
+          background: #ffedd5;
+          color: #c2410c;
+        }
+
+        .ordered {
+          background: #dcfce7;
+          color: #15803d;
+        }
+
+        .doneStatus {
+          background: #e2e8f0;
+          color: #0f172a;
+        }
+
+        .urgency.high {
+          background: #fee2e2;
+          color: #dc2626;
+        }
+
+        .urgency.medium {
+          background: #fef3c7;
+          color: #b45309;
+        }
+
+        .urgency.low {
+          background: #dcfce7;
+          color: #15803d;
+        }
+
+        .statusSelect {
+          width: 100%;
+          padding: 14px;
+          border-radius: 14px;
+          border: 1px solid #cbd5e1;
+          background: #f8fafc;
+          color: #0f172a;
+          font-size: 15px;
+          font-weight: 900;
+          cursor: pointer;
+        }
+
+        .summaryBox {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 20px;
+          padding: 18px;
+          margin-top: 22px;
+        }
+
+        .summaryBox span,
+        .detailGrid span {
+          display: block;
+          color: #64748b;
+          font-size: 13px;
+          font-weight: 900;
+          margin-bottom: 6px;
+        }
+
+        .summaryBox p {
+          margin: 0;
+          line-height: 1.5;
+          font-size: 17px;
+          font-weight: 800;
+        }
+
+        .primaryActions,
+        .secondaryActions {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 12px;
+          margin-top: 18px;
+        }
+
+        .primaryActions a,
+        .primaryActions button,
+        .secondaryActions a,
+        .secondaryActions button {
+          border: none;
+          text-decoration: none;
+          text-align: center;
+          padding: 16px 12px;
+          border-radius: 16px;
+          font-weight: 900;
+          font-size: 15px;
+          cursor: pointer;
+        }
+
+        .whatsapp {
+          background: #22c55e;
+          color: white;
+        }
+
+        .missingWhatsapp {
+          background: #ea580c;
+          color: white;
+        }
+
+        .appointment {
+          background: #7c3aed;
+          color: white;
+        }
+
+        .done {
+          background: #e2e8f0;
+          color: #0f172a;
+        }
+
+        .detailsBox {
+          margin-top: 18px;
+          border-top: 1px solid #e2e8f0;
+          padding-top: 16px;
+        }
+
+        .detailsBox summary {
+          cursor: pointer;
+          color: #155dfc;
+          font-weight: 900;
+          padding: 8px 0;
+        }
+
+        .detailGrid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 16px;
+          margin-top: 16px;
+        }
+
+        .detailGrid div {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 14px;
+        }
+
+        .textBox {
+          border-radius: 20px;
+          padding: 20px;
+          margin-top: 16px;
+          line-height: 1.6;
+          white-space: pre-wrap;
+        }
+
+        .textBox h3 {
+          margin: 0 0 10px;
+          font-size: 20px;
+        }
+
+        .textBox p {
+          margin: 0;
+          font-weight: 700;
+        }
+
+        .appointmentDetectedBox {
+          background: #ecfdf5;
+          border: 1px solid #86efac;
+        }
+
+        .appointmentDetectedList {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .appointmentDetectedItem {
+          background: white;
+          border: 1px solid #bbf7d0;
+          border-radius: 16px;
+          padding: 14px;
+        }
+
+        .appointmentDetectedItem strong {
+          display: block;
+          color: #15803d;
+          font-size: 17px;
+          margin-bottom: 6px;
+        }
+
+        .appointmentDetectedItem span {
+          display: block;
+          color: #64748b;
+          font-weight: 800;
+          font-size: 13px;
+          margin-top: 4px;
+        }
+
+        .appointmentActions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 12px;
+        }
+
+        .appointmentActions button,
+        .appointmentActions a {
+          border: none;
+          border-radius: 12px;
+          padding: 10px 12px;
+          font-weight: 900;
+          cursor: pointer;
+          font-size: 14px;
+          text-decoration: none;
+          display: inline-block;
+        }
+
+        .sendAppointmentConfirmation {
+          background: #22c55e;
+          color: white;
+        }
+
+        .calendarAppointment {
+          background: #2563eb;
+          color: white;
+        }
+
+        .confirmAppointment {
+          background: #dcfce7;
+          color: #15803d;
+        }
+
+        .finishAppointment {
+          background: #dbeafe;
+          color: #155dfc;
+        }
+
+        .discardAppointment {
+          background: #fee2e2;
+          color: #dc2626;
+        }
+
+        .messageHistoryBox {
+          background: #f8fafc;
+          border: 1px solid #dbeafe;
+        }
+
+        .messageList {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .messageItem {
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 14px;
+        }
+
+        .messageMeta {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          color: #64748b;
+          font-size: 13px;
+          font-weight: 900;
+          margin-bottom: 8px;
+        }
+
+        .messageMeta strong {
+          color: #155dfc;
+        }
+
+        .replyBox {
+          background: #e8f2ff;
+          border: 1px solid #bfdbfe;
+        }
+
+        .warningBox,
+        .missingRequestBox {
+          background: #fff7ed;
+          border: 1px solid #fed7aa;
+        }
+
+        .appointmentBox {
+          background: #f3e8ff;
+          border: 1px solid #d8b4fe;
+        }
+
+        .call {
+          background: #0f172a;
+          color: white;
+        }
+
+        .email {
+          background: #155dfc;
+          color: white;
+        }
+
+        .missingMail {
+          background: #f97316;
+          color: white;
+        }
+
+        .appointmentMail {
+          background: #9333ea;
+          color: white;
+        }
+
+        .copy {
+          background: #f59e0b;
+          color: white;
+        }
+
+        .copyMissing {
+          background: #fb923c;
+          color: white;
+        }
+
+        .copyAppointment {
+          background: #a855f7;
+          color: white;
+        }
+
+        .empty {
+          width: min(1100px, 100%);
+          margin: 0 auto;
+          background: white;
+          padding: 34px;
+          border-radius: 24px;
+          font-weight: 800;
+        }
+
+        @media (max-width: 950px) {
+          h1 {
+            font-size: 40px;
+          }
+
+          .stats,
+          .filterBar,
+          .cardHeader,
+          .primaryActions,
+          .secondaryActions,
+          .detailGrid {
+            grid-template-columns: 1fr;
+          }
+
+          .statusSelect {
+            max-width: none;
+          }
+
+          .messageMeta {
+            flex-direction: column;
+          }
+        }
+      `}</style>
+    </main>
+  );
+}
