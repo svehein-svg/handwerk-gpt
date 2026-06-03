@@ -10,11 +10,7 @@ function normalizePhone(phone: string) {
     .replace(/^0/, "+49");
 }
 
-async function saveAppointment(
-  leadId: number,
-  appointmentText: string,
-  appointmentDate: string | null
-) {
+async function saveAppointment(leadId: number, appointmentText: string) {
   if (!appointmentText.trim()) return;
 
   await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/lead_appointments`, {
@@ -28,7 +24,6 @@ async function saveAppointment(
     body: JSON.stringify({
       lead_id: leadId,
       appointment_text: appointmentText,
-      appointment_date: appointmentDate,
       status: "erkannt",
       source: "ki",
     }),
@@ -43,11 +38,9 @@ export async function POST(req: Request) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const today = new Date().toISOString();
-
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.2,
+      temperature: 0.4,
       messages: [
         {
           role: "system",
@@ -56,23 +49,12 @@ Du bist ein erfahrener KI-Assistent für Handwerksbetriebe in Deutschland.
 
 Analysiere Kundenanfragen intelligent und antworte ausschließlich als valides JSON.
 
-Heutiges Datum und aktuelle Referenzzeit:
-${today}
-
 Erkenne zusätzlich, ob der Kunde einen Termin, Zeitraum oder eine Verfügbarkeit nennt.
-
-Wichtig für appointment_date:
-- Gib appointment_date als ISO-Datum zurück: YYYY-MM-DDTHH:mm:ss
-- Verwende deutsche Zeitzone sinngemäß.
-- Wenn der Kunde "morgen um 16 Uhr" schreibt, berechne morgen 16:00 Uhr.
-- Wenn der Kunde "Mittwoch um 14 Uhr" schreibt, berechne den nächsten passenden Mittwoch 14:00 Uhr.
-- Wenn keine klare Uhrzeit erkennbar ist, lasse appointment_date leer.
-- appointment_text bleibt der natürlich formulierte Originaltermin.
 
 Beispiele:
 - "Mittwoch um 14 Uhr passt" => appointment_detected true
 - "Ich bin morgen ab 15 Uhr zuhause" => appointment_detected true
-- "Können Sie nächste Woche kommen?" => appointment_detected true, aber appointment_date leer, wenn kein genauer Tag/Uhrzeit klar ist
+- "Können Sie nächste Woche kommen?" => appointment_detected true
 - "Meine Heizung ist kaputt" => appointment_detected false
 
 Antworte exakt in diesem JSON-Format:
@@ -91,8 +73,7 @@ Antworte exakt in diesem JSON-Format:
   "suggested_reply": "",
   "status": "neu",
   "appointment_detected": false,
-  "appointment_text": "",
-  "appointment_date": ""
+  "appointment_text": ""
 }
 `,
         },
@@ -156,7 +137,6 @@ ${body.message || ""}
 
     const appointmentDetected = parsed.appointment_detected === true;
     const appointmentText = parsed.appointment_text || "";
-    const appointmentDate = parsed.appointment_date || null;
 
     const searchRes = await fetch(
       `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/leads?phone=eq.${encodeURIComponent(
@@ -219,7 +199,7 @@ ${body.message || ""}
       }
 
       if (appointmentDetected) {
-        await saveAppointment(existingLead.id, appointmentText, appointmentDate);
+        await saveAppointment(existingLead.id, appointmentText);
       }
 
       return NextResponse.json({
@@ -228,7 +208,6 @@ ${body.message || ""}
         lead_id: existingLead.id,
         appointment_detected: appointmentDetected,
         appointment_text: appointmentText,
-        appointment_date: appointmentDate,
         data: finalData,
       });
     }
@@ -264,7 +243,7 @@ ${body.message || ""}
     const newLead = insertedLead?.[0] || null;
 
     if (newLead && appointmentDetected) {
-      await saveAppointment(newLead.id, appointmentText, appointmentDate);
+      await saveAppointment(newLead.id, appointmentText);
     }
 
     return NextResponse.json({
@@ -273,7 +252,6 @@ ${body.message || ""}
       lead: newLead,
       appointment_detected: appointmentDetected,
       appointment_text: appointmentText,
-      appointment_date: appointmentDate,
       data: finalData,
     });
   } catch (err: any) {
