@@ -9,16 +9,7 @@ const supabase = createClient(
 export async function GET() {
   const { data, error } = await supabase
     .from("leads")
-    .select(`
-      *,
-      lead_messages (
-        id,
-        created_at,
-        sender,
-        channel,
-        message_text
-      )
-    `)
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) {
