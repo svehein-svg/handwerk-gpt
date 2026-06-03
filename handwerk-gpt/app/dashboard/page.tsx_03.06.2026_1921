@@ -305,17 +305,7 @@ Freundliche Grüße`;
     return `https://wa.me/${phone}?text=${text}`;
   }
 
-  function getCalendarLink(appointment: LeadAppointment) {
-  const title = encodeURIComponent("Kundentermin");
-
-  const description = encodeURIComponent(
-    appointment.appointment_text || "Handwerker Termin"
-  );
-
-  return `/api/appointments/calendar?title=${title}&description=${description}`;
-}
-
-function getMissingInfoWhatsappLink(lead: Lead) {
+  function getMissingInfoWhatsappLink(lead: Lead) {
     const phone = normalizeGermanWhatsappNumber(lead.phone || "");
     const text = encodeURIComponent(getMissingInfoText(lead));
     return `https://wa.me/${phone}?text=${text}`;
@@ -632,13 +622,6 @@ function getMissingInfoWhatsappLink(lead: Lead) {
                                   💬 Bestätigung senden
                                 </a>
                               )}
-
-                              <a
-                                href={getCalendarLink(appointment)}
-                                className="calendarAppointment"
-                              >
-                                📅 Kalenderdatei
-                              </a>
 
                               <button
                                 className="confirmAppointment"
@@ -1243,11 +1226,6 @@ function getMissingInfoWhatsappLink(lead: Lead) {
 
         .sendAppointmentConfirmation {
           background: #22c55e;
-          color: white;
-        }
-
-        .calendarAppointment {
-          background: #2563eb;
           color: white;
         }
 
