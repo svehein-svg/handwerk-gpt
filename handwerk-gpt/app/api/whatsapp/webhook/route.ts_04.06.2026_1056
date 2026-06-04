@@ -57,10 +57,10 @@ export async function POST(req: NextRequest) {
     const text = message.text?.body || "";
 
     // ========================================
-    // GEWERK ERKENNEN
+    // GEWERK ERKENNUNG
     // ========================================
 
-    let gewerk = "Allgemein";
+    let trade = "Unklar";
 
     const lower = text.toLowerCase();
 
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       lower.includes("sicherung") ||
       lower.includes("steckdose")
     ) {
-      gewerk = "Elektriker";
+      trade = "Elektriker";
     }
 
     if (
@@ -78,18 +78,20 @@ export async function POST(req: NextRequest) {
       lower.includes("heizung") ||
       lower.includes("bad")
     ) {
-      gewerk = "Heizung";
+      trade = "Heizung";
     }
 
-    if (lower.includes("dach")) {
-      gewerk = "Dachdecker";
+    if (
+      lower.includes("dach")
+    ) {
+      trade = "Dachdecker";
     }
 
     if (
       lower.includes("tür") ||
       lower.includes("fenster")
     ) {
-      gewerk = "Schreiner";
+      trade = "Schreiner";
     }
 
     // ========================================
@@ -100,15 +102,14 @@ export async function POST(req: NextRequest) {
       .from("leads")
       .insert([
         {
-          name: "WhatsApp Kunde",
-          email: "",
+          customer_name: "WhatsApp Kunde",
           phone: phone,
-          gewerk: gewerk,
-          ort: "",
-          beschreibung: text,
-          status: "neu",
-          antwort_text: "",
-          quelle: "whatsapp",
+          email: "",
+          city: "",
+          raw_message: text,
+          trade: trade,
+          summary: text,
+          urgency: "hoch",
         },
       ])
       .select();
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("LEAD SAVED:", data);
+    console.log("SUCCESS:", data);
 
     return NextResponse.json({
       success: true,
