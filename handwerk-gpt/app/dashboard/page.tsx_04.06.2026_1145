@@ -314,19 +314,6 @@ Freundliche Grüße`;
     return `https://wa.me/${phone}?text=${text}`;
   }
 
-
-  function getAppointmentConfirmationMailLink(
-    lead: Lead,
-    appointment: LeadAppointment
-  ) {
-    const subject = encodeURIComponent("Terminbestätigung");
-    const body = encodeURIComponent(
-      getAppointmentConfirmationText(lead, appointment)
-    );
-
-    return `mailto:${lead.email}?subject=${subject}&body=${body}`;
-  }
-
   function getCalendarLink(appointment: LeadAppointment) {
     const title = encodeURIComponent("Kundentermin");
     const description = encodeURIComponent(
@@ -668,24 +655,6 @@ Freundliche Grüße`;
                                   }
                                 >
                                   💬 Bestätigung senden
-                                </a>
-                              )}
-
-                              {lead.email && (
-                                <a
-                                  href={getAppointmentConfirmationMailLink(
-                                    lead,
-                                    appointment
-                                  )}
-                                  className="sendAppointmentConfirmationMail"
-                                  onClick={() =>
-                                    updateAppointmentStatus(
-                                      appointment.id,
-                                      "bestaetigt"
-                                    )
-                                  }
-                                >
-                                  ✉️ Bestätigung per E-Mail
                                 </a>
                               )}
 
@@ -1327,11 +1296,6 @@ Freundliche Grüße`;
 
         .sendAppointmentConfirmation {
           background: #22c55e;
-          color: white;
-        }
-
-        .sendAppointmentConfirmationMail {
-          background: #155dfc;
           color: white;
         }
 
