@@ -327,26 +327,11 @@ Freundliche Grüße`;
     return `mailto:${lead.email}?subject=${subject}&body=${body}`;
   }
 
-  function getCalendarLink(lead: Lead, appointment: LeadAppointment) {
-    const title = encodeURIComponent(
-      `${lead.trade || "Termin"} - ${lead.customer_name || "Kunde"}`
+  function getCalendarLink(appointment: LeadAppointment) {
+    const title = encodeURIComponent("Kundentermin");
+    const description = encodeURIComponent(
+      appointment.appointment_text || "Handwerker Termin"
     );
-
-    const description = encodeURIComponent(`Kunde: ${
-      lead.customer_name || "Unbekannter Kunde"
-    }
-
-Telefon: ${lead.phone || "-"}
-
-E-Mail: ${lead.email || "-"}
-
-Ort: ${lead.city || "-"}
-
-Gewerk: ${lead.trade || "Gewerk unklar"}
-
-Termin:
-${appointment.appointment_text || "Handwerker Termin"}`);
-
     const appointmentDate = encodeURIComponent(
       appointment.appointment_date || ""
     );
@@ -705,7 +690,7 @@ ${appointment.appointment_text || "Handwerker Termin"}`);
                               )}
 
                               <a
-                                href={getCalendarLink(lead, appointment)}
+                                href={getCalendarLink(appointment)}
                                 className="calendarAppointment"
                               >
                                 📅 Kalenderdatei
