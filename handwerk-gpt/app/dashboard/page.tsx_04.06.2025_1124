@@ -10,7 +10,7 @@ type LeadStatus =
   | "beauftragt"
   | "erledigt";
 
-type LeadFilter = "offen" | "neu" | "erledigt";
+type LeadFilter = "offen" | "neu" | "bearbeitung" | "angebot_gesendet" | "erledigt";
 
 type LeadMessage = {
   id: string;
@@ -56,8 +56,10 @@ const statusOptions: { value: LeadStatus; label: string; icon: string }[] = [
 ];
 
 const filterOptions: { value: LeadFilter; label: string; icon: string }[] = [
-  { value: "offen", label: "Offen", icon: "📨" },
+  { value: "offen", label: "Alle offenen", icon: "📨" },
   { value: "neu", label: "Neu", icon: "🔵" },
+  { value: "bearbeitung", label: "In Bearbeitung", icon: "🟡" },
+  { value: "angebot_gesendet", label: "Angebote", icon: "🟠" },
   { value: "erledigt", label: "Erledigt", icon: "✅" },
 ];
 
@@ -158,17 +160,12 @@ export default function DashboardPage() {
     await updateStatus(id, "erledigt");
   }
 
-  function shouldAutoAdvanceStatus(
-    currentStatus: string | null,
-    nextStatus: LeadStatus
-  ) {
+  function shouldAutoAdvanceStatus(currentStatus: string | null, nextStatus: LeadStatus) {
     const status = currentStatus || "neu";
 
     if (status === "erledigt" || status === "beauftragt") return false;
     if (nextStatus === "kontaktiert") return status === "neu";
-    if (nextStatus === "angebot_gesendet") {
-      return status === "neu" || status === "kontaktiert";
-    }
+    if (nextStatus === "angebot_gesendet") return status === "neu" || status === "kontaktiert";
 
     return false;
   }
@@ -296,12 +293,6 @@ Freundliche Grüße`;
     return `https://wa.me/${phone}?text=${text}`;
   }
 
-  function getMissingInfoWhatsappLink(lead: Lead) {
-    const phone = normalizeGermanWhatsappNumber(lead.phone || "");
-    const text = encodeURIComponent(getMissingInfoText(lead));
-    return `https://wa.me/${phone}?text=${text}`;
-  }
-
   function getAppointmentConfirmationWhatsappLink(
     lead: Lead,
     appointment: LeadAppointment
@@ -316,14 +307,22 @@ Freundliche Grüße`;
 
   function getCalendarLink(appointment: LeadAppointment) {
     const title = encodeURIComponent("Kundentermin");
+
     const description = encodeURIComponent(
       appointment.appointment_text || "Handwerker Termin"
     );
+
     const appointmentDate = encodeURIComponent(
       appointment.appointment_date || ""
     );
 
     return `/api/appointments/calendar?title=${title}&description=${description}&appointment_date=${appointmentDate}`;
+  }
+
+function getMissingInfoWhatsappLink(lead: Lead) {
+    const phone = normalizeGermanWhatsappNumber(lead.phone || "");
+    const text = encodeURIComponent(getMissingInfoText(lead));
+    return `https://wa.me/${phone}?text=${text}`;
   }
 
   function getMailLink(lead: Lead) {
@@ -351,26 +350,25 @@ Freundliche Grüße`;
 
   const activeLeads = leads.filter((lead) => lead.status !== "erledigt");
   const urgentLeads = activeLeads.filter((lead) => lead.urgency === "hoch");
+  const offerLeads = leads.filter((lead) => lead.status === "angebot_gesendet");
   const doneLeads = leads.filter((lead) => lead.status === "erledigt");
 
   const displayedLeads = leads.filter((lead) => {
     const status = lead.status || "neu";
 
     if (activeFilter === "offen") return status !== "erledigt";
-    if (activeFilter === "neu") return status === "neu";
-    if (activeFilter === "erledigt") return status === "erledigt";
-
-    return true;
+    if (activeFilter === "bearbeitung") return status === "kontaktiert" || status === "beauftragt";
+    return status === activeFilter;
   });
 
   function getFilterCount(filter: LeadFilter) {
     if (filter === "offen") return activeLeads.length;
-    if (filter === "neu") {
-      return leads.filter((lead) => (lead.status || "neu") === "neu").length;
+    if (filter === "bearbeitung") {
+      return leads.filter(
+        (lead) => lead.status === "kontaktiert" || lead.status === "beauftragt"
+      ).length;
     }
-    if (filter === "erledigt") return doneLeads.length;
-
-    return 0;
+    return leads.filter((lead) => (lead.status || "neu") === filter).length;
   }
 
   function getEmptyText() {
@@ -386,7 +384,7 @@ Freundliche Grüße`;
         <div className="heroTop">
           <div>
             <h1>Handwerker Dashboard</h1>
-            <p>Alle neuen Anfragen auf einen Blick.</p>
+            <p>Was muss heute erledigt werden?</p>
           </div>
         </div>
 
@@ -402,6 +400,11 @@ Freundliche Grüße`;
           </div>
 
           <div className="statCard">
+            <span>🟠 Angebote</span>
+            <strong>{offerLeads.length}</strong>
+          </div>
+
+          <div className="statCard">
             <span>✅ Erledigt</span>
             <strong>{doneLeads.length}</strong>
           </div>
@@ -414,11 +417,7 @@ Freundliche Grüße`;
             <button
               key={filter.value}
               type="button"
-              className={
-                activeFilter === filter.value
-                  ? "filterButton active"
-                  : "filterButton"
-              }
+              className={activeFilter === filter.value ? "filterButton active" : "filterButton"}
               onClick={() => setActiveFilter(filter.value)}
             >
               <span>
@@ -438,8 +437,7 @@ Freundliche Grüße`;
         <div className="leadList">
           {displayedLeads.map((lead) => {
             const hasMissingInfo =
-              Array.isArray(lead.missing_info) &&
-              lead.missing_info.length > 0;
+              Array.isArray(lead.missing_info) && lead.missing_info.length > 0;
 
             const messages = Array.isArray(lead.lead_messages)
               ? [...lead.lead_messages].sort(
@@ -469,15 +467,12 @@ Freundliche Grüße`;
                   <div className="customer">
                     <h2>{lead.customer_name || "Unbekannter Kunde"}</h2>
                     <p>
-                      📍 {lead.city || "Kein Ort"} ·{" "}
-                      {lead.trade || "Gewerk unklar"}
+                      📍 {lead.city || "Kein Ort"} · {lead.trade || "Gewerk unklar"}
                     </p>
-
                     <div className="badges">
                       <span className={getStatusClass(lead.status)}>
                         {getStatusLabel(lead.status)}
                       </span>
-
                       <span className={getUrgencyClass(lead.urgency)}>
                         {lead.urgency || "normal"}
                       </span>
@@ -501,9 +496,7 @@ Freundliche Grüße`;
                   <select
                     className="statusSelect"
                     value={(lead.status as LeadStatus) || "neu"}
-                    onChange={(e) =>
-                      updateStatus(lead.id, e.target.value as LeadStatus)
-                    }
+                    onChange={(e) => updateStatus(lead.id, e.target.value as LeadStatus)}
                   >
                     {statusOptions.map((status) => (
                       <option key={status.value} value={status.value}>
@@ -515,11 +508,7 @@ Freundliche Grüße`;
 
                 <div className="summaryBox">
                   <span>Problem</span>
-                  <p>
-                    {lead.summary ||
-                      lead.raw_message ||
-                      "Keine Beschreibung vorhanden."}
-                  </p>
+                  <p>{lead.summary || lead.raw_message || "Keine Beschreibung vorhanden."}</p>
                 </div>
 
                 <div className="primaryActions">
@@ -543,20 +532,23 @@ Freundliche Grüße`;
                     </a>
                   )}
 
-                  {lead.phone && (
+                  {hasMissingInfo && lead.phone && (
                     <a
-                      href={`tel:${lead.phone}`}
-                      className="call"
+                      href={getMissingInfoWhatsappLink(lead)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="missingWhatsapp"
                       onClick={(event) =>
                         openLinkAfterStatusUpdate(
                           event,
                           lead,
                           "kontaktiert",
-                          `tel:${lead.phone}`
+                          getMissingInfoWhatsappLink(lead),
+                          true
                         )
                       }
                     >
-                      📞 Anrufen
+                      ❓ Infos anfragen
                     </a>
                   )}
 
@@ -586,10 +578,7 @@ Freundliche Grüße`;
                 </div>
 
                 <details className="detailsBox">
-                  <summary>
-                    Details, Nachrichtenverlauf, Termine und Textvorlagen
-                    anzeigen
-                  </summary>
+                  <summary>Details, Nachrichtenverlauf, Termine und Textvorlagen anzeigen</summary>
 
                   <div className="detailGrid">
                     <div>
@@ -602,9 +591,7 @@ Freundliche Grüße`;
                     </div>
                     <div>
                       <span>Erstellt</span>
-                      <strong>
-                        {new Date(lead.created_at).toLocaleString("de-DE")}
-                      </strong>
+                      <strong>{new Date(lead.created_at).toLocaleString("de-DE")}</strong>
                     </div>
                   </div>
 
@@ -621,20 +608,14 @@ Freundliche Grüße`;
 
                       <div className="appointmentDetectedList">
                         {appointments.map((appointment) => (
-                          <div
-                            className="appointmentDetectedItem"
-                            key={appointment.id}
-                          >
+                          <div className="appointmentDetectedItem" key={appointment.id}>
                             <strong>{appointment.appointment_text}</strong>
                             <span>
-                              Status:{" "}
-                              {getAppointmentStatusLabel(appointment.status)}
+                              Status: {getAppointmentStatusLabel(appointment.status)}
                             </span>
                             <span>
                               Erkannt am{" "}
-                              {new Date(
-                                appointment.created_at
-                              ).toLocaleString("de-DE")}
+                              {new Date(appointment.created_at).toLocaleString("de-DE")}
                             </span>
 
                             <div className="appointmentActions">
@@ -668,10 +649,7 @@ Freundliche Grüße`;
                               <button
                                 className="confirmAppointment"
                                 onClick={() =>
-                                  updateAppointmentStatus(
-                                    appointment.id,
-                                    "bestaetigt"
-                                  )
+                                  updateAppointmentStatus(appointment.id, "bestaetigt")
                                 }
                               >
                                 ✅ Bestätigt
@@ -680,10 +658,7 @@ Freundliche Grüße`;
                               <button
                                 className="finishAppointment"
                                 onClick={() =>
-                                  updateAppointmentStatus(
-                                    appointment.id,
-                                    "erledigt"
-                                  )
+                                  updateAppointmentStatus(appointment.id, "erledigt")
                                 }
                               >
                                 🟢 Erledigt
@@ -692,10 +667,7 @@ Freundliche Grüße`;
                               <button
                                 className="discardAppointment"
                                 onClick={() =>
-                                  updateAppointmentStatus(
-                                    appointment.id,
-                                    "verworfen"
-                                  )
+                                  updateAppointmentStatus(appointment.id, "verworfen")
                                 }
                               >
                                 🗑️ Verwerfen
@@ -716,14 +688,10 @@ Freundliche Grüße`;
                           <div className="messageItem" key={msg.id}>
                             <div className="messageMeta">
                               <strong>
-                                {msg.channel === "web"
-                                  ? "Formular"
-                                  : msg.channel}
+                                {msg.channel === "web" ? "Formular" : msg.channel}
                               </strong>
                               <span>
-                                {new Date(msg.created_at).toLocaleString(
-                                  "de-DE"
-                                )}
+                                {new Date(msg.created_at).toLocaleString("de-DE")}
                               </span>
                             </div>
                             <p>{msg.message_text}</p>
@@ -756,34 +724,29 @@ Freundliche Grüße`;
                     </div>
                   )}
 
-                  {hasMissingInfo && lead.phone && (
-                    <div className="secondaryActions singleAction">
-                      <a
-                        href={getMissingInfoWhatsappLink(lead)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="missingWhatsapp"
-                        onClick={(event) =>
-                          openLinkAfterStatusUpdate(
-                            event,
-                            lead,
-                            "kontaktiert",
-                            getMissingInfoWhatsappLink(lead),
-                            true
-                          )
-                        }
-                      >
-                        ❓ Infos per WhatsApp anfragen
-                      </a>
-                    </div>
-                  )}
-
                   <div className="textBox appointmentBox">
                     <h3>Terminvorschlag</h3>
                     <p>{getAppointmentText(lead)}</p>
                   </div>
 
                   <div className="secondaryActions">
+                    {lead.phone && (
+                      <a
+                        href={`tel:${lead.phone}`}
+                        className="call"
+                        onClick={(event) =>
+                          openLinkAfterStatusUpdate(
+                            event,
+                            lead,
+                            "kontaktiert",
+                            `tel:${lead.phone}`
+                          )
+                        }
+                      >
+                        📞 Anrufen
+                      </a>
+                    )}
+
                     {lead.email && (
                       <a
                         href={getMailLink(lead)}
@@ -838,10 +801,7 @@ Freundliche Grüße`;
                     <button
                       onClick={() => {
                         autoUpdateStatus(lead, "kontaktiert");
-                        copyText(
-                          getReplyText(lead),
-                          "KI-Antwort wurde kopiert."
-                        );
+                        copyText(getReplyText(lead), "KI-Antwort wurde kopiert.");
                       }}
                       className="copy"
                     >
@@ -866,10 +826,7 @@ Freundliche Grüße`;
                     <button
                       onClick={() => {
                         autoUpdateStatus(lead, "angebot_gesendet");
-                        copyText(
-                          getAppointmentText(lead),
-                          "Terminvorschlag wurde kopiert."
-                        );
+                        copyText(getAppointmentText(lead), "Terminvorschlag wurde kopiert.");
                       }}
                       className="copyAppointment"
                     >
@@ -894,16 +851,16 @@ Freundliche Grüße`;
         .hero {
           background: linear-gradient(120deg, #0b2d6b, #155dfc);
           color: white;
-          padding: 34px 7% 28px;
+          padding: 42px 7% 34px;
         }
 
         .badge {
           display: inline-block;
           background: rgba(255, 255, 255, 0.16);
-          padding: 8px 16px;
+          padding: 9px 18px;
           border-radius: 999px;
           font-weight: 800;
-          margin-bottom: 20px;
+          margin-bottom: 24px;
         }
 
         .heroTop {
@@ -915,30 +872,30 @@ Freundliche Grüße`;
 
         h1 {
           margin: 0;
-          font-size: 46px;
+          font-size: 54px;
           line-height: 1;
           letter-spacing: -2px;
         }
 
         .hero p {
-          font-size: 18px;
-          margin-top: 12px;
+          font-size: 20px;
+          margin-top: 16px;
           opacity: 0.95;
         }
 
         .stats {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 16px;
-          margin-top: 34px;
-          max-width: 760px;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 18px;
+          margin-top: 44px;
+          max-width: 900px;
         }
 
         .statCard {
           background: rgba(255, 255, 255, 0.13);
           border: 1px solid rgba(255, 255, 255, 0.18);
-          border-radius: 20px;
-          padding: 18px;
+          border-radius: 22px;
+          padding: 20px;
         }
 
         .statCard span {
@@ -949,8 +906,8 @@ Freundliche Grüße`;
 
         .statCard strong {
           display: block;
-          margin-top: 8px;
-          font-size: 28px;
+          margin-top: 10px;
+          font-size: 30px;
         }
 
         .urgentStat {
@@ -958,14 +915,14 @@ Freundliche Grüße`;
         }
 
         .content {
-          padding: 26px 7% 60px;
+          padding: 30px 7% 60px;
         }
 
         .filterBar {
           width: min(1100px, 100%);
-          margin: 0 auto 22px;
+          margin: 0 auto 24px;
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(5, 1fr);
           gap: 12px;
         }
 
@@ -1002,46 +959,46 @@ Freundliche Grüße`;
         .leadList {
           display: flex;
           flex-direction: column;
-          gap: 18px;
+          gap: 20px;
           align-items: center;
         }
 
         .leadCard {
           width: min(1100px, 100%);
           background: white;
-          border-radius: 24px;
-          padding: 22px;
-          box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+          border-radius: 26px;
+          padding: 24px;
+          box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
         }
 
         .cardHeader {
           display: grid;
-          grid-template-columns: 58px 1fr 220px;
-          gap: 16px;
+          grid-template-columns: 64px 1fr 230px;
+          gap: 18px;
           align-items: center;
         }
 
         .avatar {
-          width: 54px;
-          height: 54px;
+          width: 58px;
+          height: 58px;
           border-radius: 999px;
           background: #dbeafe;
           color: #155dfc;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 24px;
+          font-size: 26px;
           font-weight: 900;
         }
 
         .customer h2 {
           margin: 0;
-          font-size: 26px;
+          font-size: 30px;
           letter-spacing: -1px;
         }
 
         .customer p {
-          margin: 6px 0 0;
+          margin: 7px 0 0;
           color: #334155;
           font-weight: 800;
         }
@@ -1049,8 +1006,8 @@ Freundliche Grüße`;
         .badges {
           display: flex;
           flex-wrap: wrap;
-          gap: 7px;
-          margin-top: 9px;
+          gap: 8px;
+          margin-top: 10px;
         }
 
         .statusBadge,
@@ -1059,9 +1016,9 @@ Freundliche Grüße`;
         .appointmentBadge {
           display: inline-block;
           width: fit-content;
-          padding: 7px 11px;
+          padding: 8px 13px;
           border-radius: 999px;
-          font-size: 13px;
+          font-size: 14px;
           font-weight: 900;
         }
 
@@ -1117,7 +1074,7 @@ Freundliche Grüße`;
 
         .statusSelect {
           width: 100%;
-          padding: 13px;
+          padding: 14px;
           border-radius: 14px;
           border: 1px solid #cbd5e1;
           background: #f8fafc;
@@ -1130,9 +1087,9 @@ Freundliche Grüße`;
         .summaryBox {
           background: #f8fafc;
           border: 1px solid #e2e8f0;
-          border-radius: 18px;
-          padding: 16px;
-          margin-top: 18px;
+          border-radius: 20px;
+          padding: 18px;
+          margin-top: 22px;
         }
 
         .summaryBox span,
@@ -1147,7 +1104,7 @@ Freundliche Grüße`;
         .summaryBox p {
           margin: 0;
           line-height: 1.5;
-          font-size: 16px;
+          font-size: 17px;
           font-weight: 800;
         }
 
@@ -1155,12 +1112,8 @@ Freundliche Grüße`;
         .secondaryActions {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: 10px;
-          margin-top: 16px;
-        }
-
-        .secondaryActions.singleAction {
-          grid-template-columns: 1fr;
+          gap: 12px;
+          margin-top: 18px;
         }
 
         .primaryActions a,
@@ -1170,8 +1123,8 @@ Freundliche Grüße`;
           border: none;
           text-decoration: none;
           text-align: center;
-          padding: 15px 11px;
-          border-radius: 15px;
+          padding: 16px 12px;
+          border-radius: 16px;
           font-weight: 900;
           font-size: 15px;
           cursor: pointer;
@@ -1198,9 +1151,9 @@ Freundliche Grüße`;
         }
 
         .detailsBox {
-          margin-top: 16px;
+          margin-top: 18px;
           border-top: 1px solid #e2e8f0;
-          padding-top: 14px;
+          padding-top: 16px;
         }
 
         .detailsBox summary {
@@ -1213,8 +1166,8 @@ Freundliche Grüße`;
         .detailGrid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 14px;
-          margin-top: 14px;
+          gap: 16px;
+          margin-top: 16px;
         }
 
         .detailGrid div {
@@ -1225,16 +1178,16 @@ Freundliche Grüße`;
         }
 
         .textBox {
-          border-radius: 18px;
-          padding: 18px;
-          margin-top: 15px;
+          border-radius: 20px;
+          padding: 20px;
+          margin-top: 16px;
           line-height: 1.6;
           white-space: pre-wrap;
         }
 
         .textBox h3 {
           margin: 0 0 10px;
-          font-size: 19px;
+          font-size: 20px;
         }
 
         .textBox p {
@@ -1413,7 +1366,7 @@ Freundliche Grüße`;
 
         @media (max-width: 950px) {
           h1 {
-            font-size: 36px;
+            font-size: 40px;
           }
 
           .stats,
